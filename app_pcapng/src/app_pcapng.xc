@@ -104,6 +104,37 @@ void timer_server(chanend c_rx0, chanend c_rx1){
   }
 }
 
+void emit_section_header_block(){
+  unsigned char shb[32];
+  (shb, unsigned[])[0] = 0x0A0D0D0A;//Block Type
+  (shb, unsigned[])[1] = 32;//Block Total Length
+  (shb, unsigned[])[2] = 0x1A2B3C4D;//Byte-Order Magic
+  (shb, unsigned short[])[6] = 1;//Major Version
+  (shb, unsigned short[])[7] = 0;//Minor Version
+  (shb, unsigned[])[4] = 0xffffffff;//Section Length
+  (shb, unsigned[])[5] = 0xffffffff;//Section Length
+  (shb, unsigned[])[6] = 0;//Options
+  (shb, unsigned[])[7] = 32;//Block Total Length
+
+  for(unsigned i=0;i<32/4;i++)
+    xscope_int(0, (shb, unsigned[])[i]);
+ // xscope_bytes(0, 32, shb);
+}
+
+void emit_interface_description_block(){
+  unsigned char idb[24];
+  (idb, unsigned[])[0] = 0x1;//Block Type
+  (idb, unsigned[])[1] = 24;//Block Total Length
+  (idb, unsigned short[])[4] = 1;//LinkType
+  (idb, unsigned short[])[5] = 0;//Reserved
+  (idb, unsigned[])[3] = CAPTURE_LENGTH;//SnapLen
+  (idb, unsigned[])[4] = 0;//Options
+  (idb, unsigned[])[5] = 24;//Block Total Length
+
+  for(unsigned i=0;i<24/4;i++)
+    xscope_int(0, (idb, unsigned[])[i]);
+  //xscope_bytes(0, 24, idb);
+}
 void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
 {
   timer t;
@@ -115,7 +146,7 @@ void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
   init_mii_rx(mii);
 
   while (1) {
-	unsigned length = 0;
+	  unsigned words_rxd = 0;
     rx :> dptr;
     asm volatile("stw %0, %1[%2]"::"r"(6),"r"(dptr), "r"(0):"memory"); //Block Type
     asm volatile("stw %0, %1[%2]"::"r"(mii.id),"r"(dptr), "r"(2):"memory"); //Interface ID
@@ -125,7 +156,7 @@ void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
     t :> time;
     c_timer_thread <: time;
 
-    asm volatile("stw %0, %1[%2]"::"r"(time),"r"(dptr), "r"(4):"memory"); //timeStamp Low
+    asm volatile("stw %0, %1[%2]"::"r"(time),"r"(dptr), "r"(4):"memory"); //TimeStamp Low
 
     unsigned top_time_bits;
     c_timer_thread :> top_time_bits;
@@ -134,9 +165,9 @@ void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
     while (!eof) {
       select {
         case mii.p_mii_rxd :> word: {
-          if(length < CAPTURE_LENGTH)
-          asm volatile("stw %0, %1[%2]"::"r"(word),"r"(dptr), "r"(length+7):"memory");
-          length += 1;
+          if(words_rxd*4 < CAPTURE_LENGTH)
+            asm volatile("stw %0, %1[%2]"::"r"(word),"r"(dptr), "r"(words_rxd+7):"memory");
+          words_rxd += 1;
           break;
         }
         case mii.p_mii_rxdv when pinseq(0) :> int lo:
@@ -150,25 +181,36 @@ void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
           mii.p_mii_rxd :> tail;
           tail = tail >> (32 - taillen);
 
-          if(length < CAPTURE_LENGTH)
-          asm volatile("stw %0, %1[%2]"::"r"(tail),"r"(dptr), "r"(length+7):"memory");
-
-          unsigned byte_count = (length*4) + (taillen>>3);
+          unsigned memory_words_used = words_rxd;
 
           if(taillen >> 3)
-          length += 1;
+            memory_words_used += 1;
 
-          if(length > CAPTURE_LENGTH)
-          length = CAPTURE_LENGTH;
+          //this is the number of bytes that the packet is in its entirty
+          unsigned byte_count = (words_rxd*4) + (taillen>>3);
 
-          asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(5):"memory"); // Captured Len
-          asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(6):"memory"); // Packet Len
-          asm volatile("stw %0, %1[%2]"::"r"(length*4+36),"r"(dptr), "r"(1):"memory"); // Block Total Length
-          asm volatile("stw %0, %1[%2]"::"r"(length*4+36),"r"(dptr), "r"(length + 7):"memory"); // Block Total Length
-          asm volatile("stw %0, %1[%2]"::"r"(0),"r"(dptr), "r"(length + 6):"memory"); // Options
+          if(byte_count > CAPTURE_LENGTH){
 
-          rx <: dptr;
-          rx <: byte_count;
+            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH),"r"(dptr), "r"(5):"memory"); // Captured Len
+            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(6):"memory"); // Packet Len
+            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH+36),"r"(dptr), "r"(1):"memory");              // Block Total Length
+            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH+36),"r"(dptr), "r"(CAPTURE_LENGTH/4 + 8):"memory");  // Block Total Length
+            asm volatile("stw %0, %1[%2]"::"r"(0),"r"(dptr), "r"(CAPTURE_LENGTH/4 + 7):"memory"); // Options
+
+            rx <: dptr;
+            rx <: CAPTURE_LENGTH + 36;
+          } else {
+            asm volatile("stw %0, %1[%2]"::"r"(tail),"r"(dptr), "r"(memory_words_used+7):"memory");
+
+            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(5):"memory"); // Captured Len
+            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(6):"memory"); // Packet Len
+            asm volatile("stw %0, %1[%2]"::"r"(memory_words_used*4+36),"r"(dptr), "r"(1):"memory"); // Block Total Length
+            asm volatile("stw %0, %1[%2]"::"r"(memory_words_used*4+36),"r"(dptr), "r"(memory_words_used + 8):"memory"); // Block Total Length
+            asm volatile("stw %0, %1[%2]"::"r"(0),"r"(dptr), "r"(memory_words_used + 7):"memory"); // Options
+
+            rx <: dptr;
+            rx <: byte_count + 36;
+          }
           break;
         }
       }
@@ -195,6 +237,9 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c) {
   for (unsigned i = 0; i < MAX_BUFFER_SIZE * BUFFER_COUNT; i++) {
     buffer[i] = 0;
   }
+
+  emit_section_header_block();
+  emit_interface_description_block();
 
   uintptr_t p_pointer_queue[BUFFER_COUNT];
   uintptr_t p_size_queue[BUFFER_COUNT];
@@ -289,16 +334,11 @@ int main() {
   chan c_xscope;
   chan c_timer0, c_timer1;
   par {
-    on tile[1]:
-    xscope_outputter(c_xscope);
-    on tile[1]:
-    receiver(c_mii1, mii1, c_timer0);
-    on tile[1]:
-    receiver(c_mii2, mii2, c_timer1);
-    on tile[1]:
-    control(c_mii1, c_mii2, c_xscope);
-    on tile[1]:
-    timer_server(c_timer0, c_timer1);
+    on tile[1]:xscope_outputter(c_xscope);
+    on tile[1]:receiver(c_mii1, mii1, c_timer0);
+    on tile[1]:receiver(c_mii2, mii2, c_timer1);
+    on tile[1]:control(c_mii1, c_mii2, c_xscope);
+    on tile[1]:timer_server(c_timer0, c_timer1);
   }
   return 0;
 }
