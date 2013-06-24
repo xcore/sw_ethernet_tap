@@ -260,9 +260,6 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c){
 			}
 		}
 	}
-
-
-
 }
 
 void xscope_outputter(chanend xscope_c){
@@ -271,28 +268,23 @@ void xscope_outputter(chanend xscope_c){
 	while(1){
 		xscope_c :> dptr;
 		xscope_c :> byte_count;
-		for(unsigned i=0;i<byte_count;i++){
-			unsigned char data;
-			//asm("ld8u %0, %1[%2]":"=r"(data):"r"(dptr), "r"(i));
-			//printhexln(data);
-		}
-
 		xscope_bytes_c(0, byte_count, dptr);
 		xscope_c <: dptr;
 	}
 }
 
 int main(){
-	chan mii1_c;
-	chan mii2_c;
-	chan xscope_c;
+	chan c_mii1;
+	chan c_mii2;
+	chan c_xscope;
 	chan c_timer0, c_timer1;
 	par {
-		on tile[1]: xscope_outputter(xscope_c);
-		on tile[1]: receiver(mii1_c, mii1, c_timer0);
-		on tile[1]: receiver(mii2_c, mii2, c_timer1);
-		on tile[1]: control(mii1_c, mii2_c, xscope_c);
+		on tile[1]: xscope_outputter(c_xscope);
+		on tile[1]: receiver(c_mii1, mii1, c_timer0);
+		on tile[1]: receiver(c_mii2, mii2, c_timer1);
+		on tile[1]: control(c_mii1, c_mii2, c_xscope);
 		on tile[1]: timer_server(c_timer0, c_timer1);
 	}
 	return 0;
 }
+
