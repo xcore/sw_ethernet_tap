@@ -17,7 +17,7 @@ USED_MODULES = module_slicekit_support
 # If the variable XCC_MAP_FLAGS is set it overrides the flags passed to
 # xcc for the final link (mapping) stage.
 XCC_FLAGS_Debug = -O2 -g -fxscope
-XCC_FLAGS_Release = -O2 -g
+XCC_FLAGS_Release = -O2 -g -fxscope
 
 # The VERBOSE variable, if set to 1, enables verbose output from the make system.
 VERBOSE = 0
