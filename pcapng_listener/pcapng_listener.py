@@ -8,6 +8,7 @@ import socket
 import struct
 import sys
 import time
+import traceback
 
 TCP_IP = '127.0.0.1'
 TCP_PORT = 12346
@@ -40,6 +41,7 @@ def emit_interface_description_block(f):
 if __name__ == "__main__":
     prev_full = False
 
+    log = open('run.log', 'wb')
     f = open('cap.pcapng', 'wb')
     emit_section_header_block(f)
 
@@ -59,15 +61,28 @@ if __name__ == "__main__":
             total_received += len(data) / XSCOPE_PACKET_SIZE
             sys.stdout.write("\r%d" % total_received)
             # There is only one byte at a time sent in each message
+            length = len(data)
 
-#            print "Received %s" % " ".join(["%d" % struct.unpack('b', b)[1] for b in bytes(data)])
-            for i in range(0, len(data), XSCOPE_PACKET_SIZE):
-                f.write(data[i+4]) 
-#                print "Writing %s" % struct.unpack('b', data[i+4])[0]
+            # Don't know why this is required, but things break if the system gets overloaded without these
+            start = 4 if prev_full else 0
+            prev_full = True if length == 16332 else False
 
+            for i in range(start, length, XSCOPE_PACKET_SIZE):
+                try:
+                    if struct.unpack('b', data[i+1])[0]:
+                        log.write("Drop count %d\n" % struct.unpack('i', data[i+4:i+8])[0])
+                        log.write("Received %s" % " ".join(["%d" % struct.unpack('b', b)[0] for b in bytes(data[i:i+16])]))
+                    else:
+                        f.write(data[i+4]) 
+
+                except struct.error:
+                    print "ERROR: %d len %d" % (i, length)
+                    print "Received %s" % " ".join(["%d" % struct.unpack('b', b)[0] for b in bytes(data)])
+                    traceback.print_exc(file=sys.stdout)
     
         except KeyboardInterrupt:
             print "Finishing"
             f.close()
             s.close()
             sys.exit()
+

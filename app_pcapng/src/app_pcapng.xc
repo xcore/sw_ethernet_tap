@@ -4,6 +4,10 @@
 #include <print.h>
 #include <xclib.h>
 #include "util.h"
+#include "xassert.h"
+
+#define SEND_PACKET_DATA 1
+#define NOTIFY_DROPPED_PACKETS 1
 
 /*
  * Use the CAPTURE_BYTES to define the leading number of bytes that the ethernet tap captures of each frame.
@@ -105,8 +109,8 @@ void timer_server(server interface timer_interface i_tmr[num_clients], unsigned 
         break;
       }
       case t when timerafter(next_time) :> void : {
-        next_time += (1<<PERIOD_BITS);
-        t0 += (1<<PERIOD_BITS);
+        next_time += (1 << PERIOD_BITS);
+        t0 += (1 << PERIOD_BITS);
         topbits++;
         break;
       }
@@ -202,15 +206,16 @@ static void pass_buffer_to_mii(chanend mii_c, uintptr_t free_queue[BUFFER_COUNT]
 static inline void process_buffer(chanend c, unsigned &work_pending,
     unsigned &pending_head_index, unsigned pending_tail_index, unsigned &free_top_index,
     uintptr_t pointer_queue[n], uintptr_t size_queue[n], uintptr_t free_queue[n], unsigned n,
-    uintptr_t full_buf)
+    uintptr_t full_buf, unsigned &packet_dropped_count)
 {
   unsigned length_in_bytes;
   c :> length_in_bytes;
 
-  if ((pending_head_index - pending_tail_index) == BUFFER_COUNT ||
-        free_top_index == 0) {
-    /* drop the packet - the buffer is full */
-    /* TODO warn */
+  if ((pending_head_index - pending_tail_index) == BUFFER_COUNT || free_top_index == 0) {
+    packet_dropped_count += 1;
+    if (NOTIFY_DROPPED_PACKETS)
+      xscope_int(1, packet_dropped_count);
+//    assert(0);
   } else {
     unsigned index = pending_head_index % BUFFER_COUNT;
     pointer_queue[index] = full_buf;
@@ -224,8 +229,8 @@ static inline void process_buffer(chanend c, unsigned &work_pending,
 void control(chanend mii1_c, chanend mii2_c, chanend xscope_c)
 {
   unsigned char buffer[MAX_BUFFER_SIZE * BUFFER_COUNT];
-  unsigned work_pending = 0;
-  //start by issuing buffers to both of the miis
+  unsigned int work_pending = 0;
+  unsigned int packet_dropped_count = 0;
 
   for (unsigned i = 0; i < MAX_BUFFER_SIZE * BUFFER_COUNT; i++) {
     buffer[i] = 0;
@@ -233,7 +238,6 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c)
 
   uintptr_t pointer_queue[BUFFER_COUNT];
   uintptr_t size_queue[BUFFER_COUNT];
-
   uintptr_t free_queue[BUFFER_COUNT];
 
   asm("mov %0, %1":"=r"(free_queue[0]):"r"(buffer));
@@ -244,6 +248,7 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c)
   unsigned pending_head_index = 0;
   unsigned free_top_index = BUFFER_COUNT - 1;
 
+  //start by issuing buffers to both of the miis
   pass_buffer_to_mii(mii1_c, free_queue, free_top_index);
   pass_buffer_to_mii(mii2_c, free_queue, free_top_index);
 
@@ -252,13 +257,13 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c)
       case mii1_c :> uintptr_t full_buf: {
         process_buffer(mii1_c, work_pending, pending_head_index, pending_tail_index,
             free_top_index, pointer_queue, size_queue, free_queue, BUFFER_COUNT,
-            full_buf);
+            full_buf, packet_dropped_count);
         break;
       }
       case mii2_c :> uintptr_t full_buf: {
         process_buffer(mii2_c, work_pending, pending_head_index, pending_tail_index,
             free_top_index, pointer_queue, size_queue, free_queue, BUFFER_COUNT,
-            full_buf);
+            full_buf, packet_dropped_count);
         break;
       }
       work_pending => default : {
@@ -268,11 +273,13 @@ void control(chanend mii1_c, chanend mii2_c, chanend xscope_c)
 
         unsigned size = size_queue[index];
         xscope_c <: size;
-        master {
-          for (unsigned i = 0; i < size/4; i++) {
-            unsigned tmp;
-            asm volatile("ldw %0, %1[%2]":"=r"(tmp):"r"(pointer_queue[index]), "r"(i):"memory");
-            xscope_c <: tmp;
+        if (SEND_PACKET_DATA) {
+          master {
+            for (unsigned i = 0; i < size/4; i++) {
+              unsigned tmp;
+              asm volatile("ldw %0, %1[%2]":"=r"(tmp):"r"(pointer_queue[index]), "r"(i):"memory");
+              xscope_c <: tmp;
+            }
           }
         }
 
@@ -292,16 +299,24 @@ void xscope_outputter(chanend xscope_c)
   unsigned byte_count;
   while (1) {
     xscope_c :> byte_count;
-    slave {
-      for (unsigned i = 0; i < byte_count/4; i++)
-        xscope_c :> buffer[i];
+    if (SEND_PACKET_DATA) {
+      slave {
+        for (unsigned i = 0; i < byte_count/4; i++)
+          xscope_c :> buffer[i];
+      }
+      xscope_bytes_c(0, byte_count, (unsigned char *)buffer);
+    } else {
+      xscope_int(0, byte_count);
     }
-    xscope_bytes_c(0, byte_count, (unsigned char *)buffer);
   }
 }
 
 void xscope_user_init(void) {
-  xscope_register(1, XSCOPE_CONTINUOUS, "Continuous Value 1", XSCOPE_UINT, "Value");
+  xscope_register(2, XSCOPE_CONTINUOUS, "Packet Data", XSCOPE_UINT, "Value"
+#if NOTIFY_DROPPED_PACKETS
+      , XSCOPE_DISCRETE,   "Packet Dropped", XSCOPE_UINT, "Value"
+#endif
+      );
 }
 
 int main()
@@ -311,6 +326,8 @@ int main()
   chan c_xscope;
   interface timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
+    // xscope outputter has to be on tile 0 because otherwise the packet data gets
+    // re-ordered when being sent from the outputter to the xscope server.
     on tile[0]:xscope_outputter(c_xscope);
     on tile[1]:receiver(c_mii1, mii1, i_tmr[0]);
     on tile[1]:receiver(c_mii2, mii2, i_tmr[1]);
