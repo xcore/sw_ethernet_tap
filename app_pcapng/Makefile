@@ -9,7 +9,7 @@ TARGET = SLICEKIT-L16
 APP_NAME = app_pcapng
 
 # The USED_MODULES variable lists other module used by the application.
-USED_MODULES = module_slicekit_support module_xassert
+USED_MODULES = module_slicekit_support module_xassert module_pcapng
 
 # The flags passed to xcc when building the application
 # You can also set the following to override flags for a particular language:
