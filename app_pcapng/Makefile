@@ -9,7 +9,7 @@ TARGET = SLICEKIT-L16
 APP_NAME = app_pcapng
 
 # The USED_MODULES variable lists other module used by the application.
-USED_MODULES = module_slicekit_support
+USED_MODULES = module_slicekit_support module_xassert module_pcapng
 
 # The flags passed to xcc when building the application
 # You can also set the following to override flags for a particular language:
@@ -17,7 +17,7 @@ USED_MODULES = module_slicekit_support
 # If the variable XCC_MAP_FLAGS is set it overrides the flags passed to
 # xcc for the final link (mapping) stage.
 XCC_FLAGS_Debug = -O2 -g -fxscope
-XCC_FLAGS_Release = -O2 -g
+XCC_FLAGS_Release = -O2 -g -fxscope
 
 # The VERBOSE variable, if set to 1, enables verbose output from the make system.
 VERBOSE = 0
