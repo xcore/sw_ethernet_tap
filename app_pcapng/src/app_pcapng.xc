@@ -4,26 +4,18 @@
 #include <print.h>
 #include <xclib.h>
 #include "util.h"
+#include "xassert.h"
+#include "receiver.h"
+#include "buffers.h"
+#include "pcapng.h"
+#include "pcapng_conf.h"
 
-/*
- * Use the CAPTURE_LENGTH to define the leading number of bytes that the ethernet tap captures of each frame.
- */
-#define CAPTURE_LENGTH 64
+#define SEND_PACKET_DATA 1
 
-void xscope_user_init(void) {
-      xscope_register(1,XSCOPE_CONTINUOUS, "Continuous Value 1",XSCOPE_UINT, "Value");
-}
-
-typedef struct {
-	unsigned id;
-    clock clk_mii_rx;            /**< MII RX Clock Block **/
-    in port p_mii_rxclk;         /**< MII RX clock wire */
-    in buffered port:32 p_mii_rxd; /**< MII RX data wire */
-    in port p_mii_rxdv;          /**< MII RX data valid wire */
-} mii_rx;
+#define NUM_TIMER_CLIENTS 2
 
 // Circle slot
-on tile[1]: mii_rx mii2 = {
+on tile[1]: pcapng_mii_rx_t mii2 = {
   1,
   XS1_CLKBLK_3,
   XS1_PORT_1B,
@@ -32,7 +24,7 @@ on tile[1]: mii_rx mii2 = {
 };
 
 // Square slot
-on tile[1]: mii_rx mii1 = {
+on tile[1]: pcapng_mii_rx_t mii1 = {
   0,
   XS1_CLKBLK_4,
   XS1_PORT_1J,
@@ -40,305 +32,138 @@ on tile[1]: mii_rx mii1 = {
   XS1_PORT_1K,
 };
 
-#define PAD_DELAY_RECEIVE    0
-#define CLK_DELAY_RECEIVE    0
-
-void init_mii_rx(mii_rx &m){
-	set_port_use_on(m.p_mii_rxclk);
-  m.p_mii_rxclk :> int x;
-  set_port_use_on(m.p_mii_rxd);
-  set_port_use_on(m.p_mii_rxdv);
-  set_pad_delay(m.p_mii_rxclk, PAD_DELAY_RECEIVE);
-
-  set_port_strobed(m.p_mii_rxd);
-  set_port_slave(m.p_mii_rxd);
-
-  set_clock_on(m.clk_mii_rx);
-  set_clock_src(m.clk_mii_rx, m.p_mii_rxclk);
-  set_clock_ready_src(m.clk_mii_rx, m.p_mii_rxdv);
-  set_port_clock(m.p_mii_rxd, m.clk_mii_rx);
-  set_port_clock(m.p_mii_rxdv, m.clk_mii_rx);
-
-  set_clock_rise_delay(m.clk_mii_rx, CLK_DELAY_RECEIVE);
-
-  start_clock(m.clk_mii_rx);
-
-  clearbuf(m.p_mii_rxd);
-}
-
-#define PERIOD_BITS 30
-
-void timer_server(chanend c_rx0, chanend c_rx1){
-	unsigned t0;
-  unsigned next_time;
-  timer t;
-  unsigned topbits = 0;
-  t :> t0;
-  next_time = t0 + (1 << PERIOD_BITS);
-
-  while (1) {
-    select {
-      case c_rx0 :> unsigned time: {
-        if(time - t0 > (1<<PERIOD_BITS)) {
-          c_rx0 <: (topbits-1)>>(32-PERIOD_BITS);
-        } else {
-          c_rx0 <: topbits>>(32-PERIOD_BITS);
-        }
-        break;
-      }
-      case c_rx1 :> unsigned time: {
-        if(time - t0 > (1<<PERIOD_BITS)) {
-          c_rx1 <: (topbits-1)>>(32-PERIOD_BITS);
-        } else {
-          c_rx1 <: topbits>>(32-PERIOD_BITS);
-        }
-        break;
-      }
-      case t when timerafter(next_time) :> void : {
-        next_time += (1<<PERIOD_BITS);
-        t0 += (1<<PERIOD_BITS);
-        topbits++;
-        break;
-      }
-    }
-  }
-}
-
-void emit_section_header_block(){
-  unsigned char shb[32];
-  (shb, unsigned[])[0] = 0x0A0D0D0A;//Block Type
-  (shb, unsigned[])[1] = 32;//Block Total Length
-  (shb, unsigned[])[2] = 0x1A2B3C4D;//Byte-Order Magic
-  (shb, unsigned short[])[6] = 1;//Major Version
-  (shb, unsigned short[])[7] = 0;//Minor Version
-  (shb, unsigned[])[4] = 0xffffffff;//Section Length
-  (shb, unsigned[])[5] = 0xffffffff;//Section Length
-  (shb, unsigned[])[6] = 0;//Options
-  (shb, unsigned[])[7] = 32;//Block Total Length
-
-  for(unsigned i=0;i<32/4;i++)
-    xscope_int(0, (shb, unsigned[])[i]);
- // xscope_bytes(0, 32, shb);
-}
-
-void emit_interface_description_block(){
-  unsigned char idb[24];
-  (idb, unsigned[])[0] = 0x1;//Block Type
-  (idb, unsigned[])[1] = 24;//Block Total Length
-  (idb, unsigned short[])[4] = 1;//LinkType
-  (idb, unsigned short[])[5] = 0;//Reserved
-  (idb, unsigned[])[3] = CAPTURE_LENGTH;//SnapLen
-  (idb, unsigned[])[4] = 0;//Options
-  (idb, unsigned[])[5] = 24;//Block Total Length
-
-  for(unsigned i=0;i<24/4;i++)
-    xscope_int(0, (idb, unsigned[])[i]);
-  //xscope_bytes(0, 24, idb);
-}
-void receiver(chanend rx, mii_rx &mii, chanend c_timer_thread)
+static inline void process_received(chanend c, int &work_pending,
+    buffers_used_t &used_buffers, buffers_free_t &free_buffers, uintptr_t buffer)
 {
-  timer t;
-  unsigned time;
-  unsigned word;
-  uintptr_t dptr;
-  unsigned eof = 0;
+  unsigned length_in_bytes;
+  c :> length_in_bytes;
 
-  init_mii_rx(mii);
-
-  while (1) {
-	  unsigned words_rxd = 0;
-    rx :> dptr;
-    asm volatile("stw %0, %1[%2]"::"r"(6),"r"(dptr), "r"(0):"memory"); //Block Type
-    asm volatile("stw %0, %1[%2]"::"r"(mii.id),"r"(dptr), "r"(2):"memory"); //Interface ID
-
-    eof = 0;
-    mii.p_mii_rxd when pinseq(0xD) :> int sof;
-    t :> time;
-    c_timer_thread <: time;
-
-    asm volatile("stw %0, %1[%2]"::"r"(time),"r"(dptr), "r"(4):"memory"); //TimeStamp Low
-
-    unsigned top_time_bits;
-    c_timer_thread :> top_time_bits;
-    asm volatile("stw %0, %1[%2]"::"r"(top_time_bits),"r"(dptr), "r"(3):"memory"); //TimeStamp High
-
-    while (!eof) {
-      select {
-        case mii.p_mii_rxd :> word: {
-          if(words_rxd*4 < CAPTURE_LENGTH)
-            asm volatile("stw %0, %1[%2]"::"r"(word),"r"(dptr), "r"(words_rxd+7):"memory");
-          words_rxd += 1;
-          break;
-        }
-        case mii.p_mii_rxdv when pinseq(0) :> int lo:
-        {
-          int tail;
-          int taillen = endin(mii.p_mii_rxd);
-
-          //TODO taillen > 32 ??
-
-          eof = 1;
-          mii.p_mii_rxd :> tail;
-          tail = tail >> (32 - taillen);
-
-          unsigned memory_words_used = words_rxd;
-
-          if(taillen >> 3)
-            memory_words_used += 1;
-
-          //this is the number of bytes that the packet is in its entirty
-          unsigned byte_count = (words_rxd*4) + (taillen>>3);
-
-          if(byte_count > CAPTURE_LENGTH){
-
-            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH),"r"(dptr), "r"(5):"memory"); // Captured Len
-            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(6):"memory"); // Packet Len
-            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH+36),"r"(dptr), "r"(1):"memory");              // Block Total Length
-            asm volatile("stw %0, %1[%2]"::"r"(CAPTURE_LENGTH+36),"r"(dptr), "r"(CAPTURE_LENGTH/4 + 8):"memory");  // Block Total Length
-            asm volatile("stw %0, %1[%2]"::"r"(0),"r"(dptr), "r"(CAPTURE_LENGTH/4 + 7):"memory"); // Options
-
-            rx <: dptr;
-            rx <: CAPTURE_LENGTH + 36;
-          } else {
-            asm volatile("stw %0, %1[%2]"::"r"(tail),"r"(dptr), "r"(memory_words_used+7):"memory");
-
-            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(5):"memory"); // Captured Len
-            asm volatile("stw %0, %1[%2]"::"r"(byte_count),"r"(dptr), "r"(6):"memory"); // Packet Len
-            asm volatile("stw %0, %1[%2]"::"r"(memory_words_used*4+36),"r"(dptr), "r"(1):"memory"); // Block Total Length
-            asm volatile("stw %0, %1[%2]"::"r"(memory_words_used*4+36),"r"(dptr), "r"(memory_words_used + 8):"memory"); // Block Total Length
-            asm volatile("stw %0, %1[%2]"::"r"(0),"r"(dptr), "r"(memory_words_used + 7):"memory"); // Options
-
-            rx <: dptr;
-            rx <: byte_count + 36;
-          }
-          break;
-        }
-      }
-    }
+  if (buffers_used_full(used_buffers) || free_buffers.top_index == 0) {
+    // No more buffers
+    assert(0);
+  } else {
+    buffers_used_add(used_buffers, buffer, length_in_bytes);
+    work_pending++;
+    c <: buffers_free_acquire(free_buffers);
   }
 }
 
-#define BUFFER_COUNT 32
-#define MAX_BUFFER_SIZE (1524+36)
+void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
+{
+  buffers_used_t used_buffers;
+  buffers_used_initialise(used_buffers);
 
-static void pass_buffer_to_mii(chanend mii_c,
-    uintptr_t free_queue[BUFFER_COUNT], unsigned & free_top_index) {
-  mii_c <: free_queue[free_top_index];
-  free_top_index--;
-}
+  buffers_free_t free_buffers;
+  buffers_free_initialise(free_buffers);
 
-void control(chanend mii1_c, chanend mii2_c, chanend xscope_c) {
-
-  unsigned char buffer[MAX_BUFFER_SIZE * BUFFER_COUNT];
-  unsigned xscope_busy = 0;
-  unsigned work_pending = 0;
   //start by issuing buffers to both of the miis
+  c_mii1 <: buffers_free_acquire(free_buffers);
+  c_mii2 <: buffers_free_acquire(free_buffers);
 
-  for (unsigned i = 0; i < MAX_BUFFER_SIZE * BUFFER_COUNT; i++) {
-    buffer[i] = 0;
-  }
-
-  emit_section_header_block();
-  emit_interface_description_block();
-
-  uintptr_t p_pointer_queue[BUFFER_COUNT];
-  uintptr_t p_size_queue[BUFFER_COUNT];
-
-  uintptr_t free_queue[BUFFER_COUNT];
-
-  asm("mov %0, %1":"=r"(free_queue[0]):"r"(buffer));
-  for (unsigned i = 1; i < BUFFER_COUNT; i++)
-    free_queue[i] = free_queue[i - 1] + MAX_BUFFER_SIZE;
-
-  unsigned pending_tail_index = 0;
-  unsigned pending_head_index = 0;
-  unsigned free_top_index = BUFFER_COUNT - 1;
-
-  pass_buffer_to_mii(mii1_c, free_queue, free_top_index);
-  pass_buffer_to_mii(mii2_c, free_queue, free_top_index);
-
+  int sender_active = 0;
+  int work_pending = 0;
   while (1) {
     select {
-      case mii1_c :> uintptr_t full_buf: {
+      case c_mii1 :> uintptr_t buffer : {
+        process_received(c_mii1, work_pending, used_buffers, free_buffers, buffer);
+        break;
+      }
+      case c_mii2 :> uintptr_t buffer : {
+        process_received(c_mii2, work_pending, used_buffers, free_buffers, buffer);
+        break;
+      }
+      case sender_active => c_sender :> uintptr_t sent_buffer : {
+        buffers_free_release(free_buffers, sent_buffer);
+        sender_active = 0;
+        break;
+      }
+      work_pending && !sender_active => default : {
+        // Send a pointer out to the outputter
+        uintptr_t buffer;
         unsigned length_in_bytes;
-        mii1_c :> length_in_bytes;
-
-        if(pending_head_index -pending_tail_index == BUFFER_COUNT ||
-            free_top_index == 0) {
-          //drop the packet - the buffer is full
-          //TODO warn
-        } else {
-          unsigned index = pending_head_index%BUFFER_COUNT;
-          p_pointer_queue[index] = full_buf;
-          p_size_queue[index] = length_in_bytes;
-          pending_head_index++;
-          work_pending++;
-          pass_buffer_to_mii(mii1_c, free_queue, free_top_index);
+        {buffer, length_in_bytes} = buffers_used_take(used_buffers);
+        master {
+          c_sender <: buffer;
+          c_sender <: length_in_bytes;
         }
-        break;
-      }
-      case mii2_c :> uintptr_t full_buf: {
-        unsigned length_in_bytes;
-        mii2_c :> length_in_bytes;
-
-        if(pending_head_index -pending_tail_index == BUFFER_COUNT||
-            free_top_index == 0) {
-          //drop the packet - the buffer is full
-          //TODO warn
-        } else {
-          unsigned index = pending_head_index%BUFFER_COUNT;
-          p_pointer_queue[index] = full_buf;
-          p_size_queue[index] = length_in_bytes;
-          pending_head_index++;
-          work_pending++;
-          pass_buffer_to_mii(mii2_c, free_queue, free_top_index);
-        }
-        break;
-      }
-      case xscope_c :> uintptr_t buf : {
-        free_queue[free_top_index] = buf;
-        xscope_busy = 0;
-        free_top_index++;
-        break;
-      }
-      work_pending && !xscope_busy=> default : {
-        //send a pointer out to the outputter
-        unsigned index = pending_tail_index%BUFFER_COUNT;
-        pending_tail_index++;
-
-        xscope_c <: p_pointer_queue[index];
-        xscope_c <: p_size_queue[index];
-
         work_pending--;
-        xscope_busy = 1;
+        sender_active = 1;
         break;
       }
     }
   }
 }
 
-void xscope_outputter(chanend xscope_c) {
-  uintptr_t dptr;
+/*
+ * Takes buffer pointers and passes the full packets to the xscope core on tile 0
+ */
+void buffer_sender(chanend c_xscope, chanend c_control)
+{
+  while (1) {
+    uintptr_t buffer;
+    unsigned length_in_bytes;
+
+    slave {
+      c_control :> buffer;
+      c_control :> length_in_bytes;
+    }
+
+    c_xscope <: length_in_bytes;
+    if (SEND_PACKET_DATA) {
+      master {
+        for (unsigned i = 0; i < length_in_bytes/4; i++) {
+          unsigned tmp;
+          asm volatile("ldw %0, %1[%2]":"=r"(tmp):"r"(buffer), "r"(i):"memory");
+          c_xscope <: tmp;
+        }
+      }
+    }
+    c_control <: buffer;
+  }
+}
+
+/*
+ * A core for sending the actual packet bytes to xscope. This needs to be running
+ * on tile[0] to prevent token overtaking in the interconnect.
+ */
+void xscope_outputter(chanend c_xscope)
+{
+  unsigned int buffer[MAX_BUFFER_SIZE];
   unsigned byte_count;
   while (1) {
-    xscope_c :> dptr;
-    xscope_c :> byte_count;
-    xscope_bytes_c(0, byte_count, dptr);
-    xscope_c <: dptr;
+    c_xscope :> byte_count;
+    if (SEND_PACKET_DATA) {
+      slave {
+        for (unsigned i = 0; i < byte_count/4; i++)
+          c_xscope :> buffer[i];
+      }
+      xscope_bytes_c(0, byte_count, (unsigned char *)buffer);
+    } else {
+      xscope_int(0, byte_count);
+    }
   }
 }
 
-int main() {
+void xscope_user_init(void) {
+  xscope_register(1, XSCOPE_CONTINUOUS, "Packet Data", XSCOPE_UINT, "Value");
+}
+
+int main()
+{
   chan c_mii1;
   chan c_mii2;
+  chan c_control;
   chan c_xscope;
-  chan c_timer0, c_timer1;
+  interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
-    on tile[1]:xscope_outputter(c_xscope);
-    on tile[1]:receiver(c_mii1, mii1, c_timer0);
-    on tile[1]:receiver(c_mii2, mii2, c_timer1);
-    on tile[1]:control(c_mii1, c_mii2, c_xscope);
-    on tile[1]:timer_server(c_timer0, c_timer1);
+    // xscope outputter has to be on tile 0 because otherwise the packet data gets
+    // re-ordered when being sent from the outputter to the xscope server.
+    on tile[0]:xscope_outputter(c_xscope);
+    on tile[1]:buffer_sender(c_xscope, c_control);
+    on tile[1]:control(c_mii1, c_mii2, c_control);
+    on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
+    on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
+    on tile[1]:pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
   }
   return 0;
 }
