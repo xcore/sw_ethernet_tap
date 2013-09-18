@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <print.h>
 #include <xclib.h>
-#include "util.h"
 
 #include "receiver.h"
 #include "pcapng.h"
