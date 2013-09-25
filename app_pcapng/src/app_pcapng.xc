@@ -97,7 +97,7 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
 /*
  * Takes buffer pointers and passes the full packets to the xscope core on tile 0
  */
-void buffer_sender(chanend c_xscope, chanend c_control)
+void buffer_sender(chanend c_control)
 {
   while (1) {
     uintptr_t buffer;
@@ -107,40 +107,9 @@ void buffer_sender(chanend c_xscope, chanend c_control)
       c_control :> buffer;
       c_control :> length_in_bytes;
     }
+    xscope_bytes_c(0, length_in_bytes, buffer);
 
-    c_xscope <: length_in_bytes;
-    if (SEND_PACKET_DATA) {
-      master {
-        for (unsigned i = 0; i < length_in_bytes/4; i++) {
-          unsigned tmp;
-          asm volatile("ldw %0, %1[%2]":"=r"(tmp):"r"(buffer), "r"(i):"memory");
-          c_xscope <: tmp;
-        }
-      }
-    }
     c_control <: buffer;
-  }
-}
-
-/*
- * A core for sending the actual packet bytes to xscope. This needs to be running
- * on tile[0] to prevent token overtaking in the interconnect.
- */
-void xscope_outputter(chanend c_xscope)
-{
-  unsigned int buffer[MAX_BUFFER_SIZE];
-  unsigned byte_count;
-  while (1) {
-    c_xscope :> byte_count;
-    if (SEND_PACKET_DATA) {
-      slave {
-        for (unsigned i = 0; i < byte_count/4; i++)
-          c_xscope :> buffer[i];
-      }
-      xscope_bytes_c(0, byte_count, (unsigned char *)buffer);
-    } else {
-      xscope_int(0, byte_count);
-    }
   }
 }
 
@@ -153,13 +122,9 @@ int main()
   chan c_mii1;
   chan c_mii2;
   chan c_control;
-  chan c_xscope;
   interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
-    // xscope outputter has to be on tile 0 because otherwise the packet data gets
-    // re-ordered when being sent from the outputter to the xscope server.
-    on tile[0]:xscope_outputter(c_xscope);
-    on tile[1]:buffer_sender(c_xscope, c_control);
+    on tile[1]:buffer_sender(c_control);
     on tile[1]:control(c_mii1, c_mii2, c_control);
     on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
     on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
