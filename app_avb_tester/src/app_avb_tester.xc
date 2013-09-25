@@ -3,12 +3,12 @@
 #include <stdint.h>
 #include <print.h>
 #include <xclib.h>
-#include "util.h"
 #include "xassert.h"
 #include "receiver.h"
 #include "buffers.h"
 #include "pcapng.h"
 #include "pcapng_conf.h"
+#include "analyser.h"
 
 #define SEND_PACKET_DATA 1
 
@@ -72,8 +72,8 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
         process_received(c_mii2, work_pending, used_buffers, free_buffers, buffer);
         break;
       }
-      case sender_active => c_sender :> uintptr_t sent_buffer : {
-        buffers_free_release(free_buffers, sent_buffer);
+      case sender_active => c_sender :> uintptr_t buffer : {
+        buffers_free_release(free_buffers, buffer);
         sender_active = 0;
         break;
       }
@@ -97,35 +97,80 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
 /*
  * Takes buffer pointers and passes the full packets to the xscope core on tile 0
  */
-void buffer_sender(chanend c_control)
+void buffer_sender(chanend c_analyser, chanend c_sender)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
 
     slave {
-      c_control :> buffer;
-      c_control :> length_in_bytes;
+      c_sender :> buffer;
+      c_sender :> length_in_bytes;
     }
-    xscope_bytes_c(0, length_in_bytes, buffer);
 
-    c_control <: buffer;
+    unsigned int length_in_words = (length_in_bytes + 3) / 4;
+    c_analyser <: length_in_words;
+    master {
+      for (unsigned i = 0; i < length_in_words; i++) {
+        unsigned tmp;
+        asm volatile("ldw %0, %1[%2]":"=r"(tmp):"r"(buffer), "r"(i):"memory");
+        c_analyser <: tmp;
+      }
+    }
+    c_sender <: buffer;
   }
 }
 
-void xscope_user_init(void) {
-  xscope_register(1, XSCOPE_CONTINUOUS, "Packet Data", XSCOPE_UINT, "Value");
+void analyser(chanend c_analyser)
+{
+  unsigned int buffer[MAX_BUFFER_SIZE];
+  unsigned length_in_words;
+  while (1) {
+    c_analyser :> length_in_words;
+    slave {
+      for (unsigned i = 0; i < length_in_words; i++)
+        c_analyser :> buffer[i];
+    }
+    analyse(buffer);
+  }
+}
+
+void periodic_checks()
+{
+  timer tmr;
+  int time;
+  tmr :> time;
+
+  while (1) {
+    time += 100000000;
+    tmr when timerafter(time) :> void;
+    check_counts();
+  }
+}
+
+void xscope_user_init()
+{
+  xscope_register(0, 0, "", 0, "");
+  xscope_config_io(XSCOPE_IO_BASIC);
 }
 
 int main()
 {
   chan c_mii1;
   chan c_mii2;
-  chan c_control;
+  chan c_analyser;
+  chan c_sender;
   interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
-    on tile[1]:buffer_sender(c_control);
-    on tile[1]:control(c_mii1, c_mii2, c_control);
+    on tile[0]: {
+      analyse_init();
+      par {
+        periodic_checks();
+        analyser(c_analyser);
+      }
+    }
+    on tile[1]:buffer_sender(c_analyser, c_sender);
+    on tile[1]:control(c_mii1, c_mii2, c_sender);
     on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
     on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
     on tile[1]:pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
