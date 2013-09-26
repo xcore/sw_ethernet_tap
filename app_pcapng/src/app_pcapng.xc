@@ -48,7 +48,7 @@ static inline void process_received(chanend c, int &work_pending,
   }
 }
 
-void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
+void control(chanend c_mii1, chanend c_mii2, chanend c_control_to_outputter)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -72,7 +72,7 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
         process_received(c_mii2, work_pending, used_buffers, free_buffers, buffer);
         break;
       }
-      case sender_active => c_sender :> uintptr_t sent_buffer : {
+      case sender_active => c_control_to_outputter :> uintptr_t sent_buffer : {
         buffers_free_release(free_buffers, sent_buffer);
         sender_active = 0;
         break;
@@ -83,8 +83,8 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
         unsigned length_in_bytes;
         {buffer, length_in_bytes} = buffers_used_take(used_buffers);
         master {
-          c_sender <: buffer;
-          c_sender <: length_in_bytes;
+          c_control_to_outputter <: buffer;
+          c_control_to_outputter <: length_in_bytes;
         }
         work_pending--;
         sender_active = 1;
@@ -94,22 +94,19 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_sender)
   }
 }
 
-/*
- * Takes buffer pointers and passes the full packets to the xscope core on tile 0
- */
-void buffer_sender(chanend c_control)
+void xscope_outputter(chanend c_control_to_outputter)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
 
     slave {
-      c_control :> buffer;
-      c_control :> length_in_bytes;
+      c_control_to_outputter :> buffer;
+      c_control_to_outputter :> length_in_bytes;
     }
     xscope_bytes_c(0, length_in_bytes, buffer);
 
-    c_control <: buffer;
+    c_control_to_outputter <: buffer;
   }
 }
 
@@ -121,11 +118,11 @@ int main()
 {
   chan c_mii1;
   chan c_mii2;
-  chan c_control;
+  chan c_control_to_outputter;
   interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
-    on tile[1]:buffer_sender(c_control);
-    on tile[1]:control(c_mii1, c_mii2, c_control);
+    on tile[1]:xscope_outputter(c_control_to_outputter);
+    on tile[1]:control(c_mii1, c_mii2, c_control_to_outputter);
     on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
     on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
     on tile[1]:pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
