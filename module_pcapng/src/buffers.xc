@@ -8,7 +8,7 @@ unsigned char g_buffer[MAX_BUFFER_SIZE * BUFFER_COUNT];
 
 void buffers_free_initialise(buffers_free_t &free)
 {
-  free.top_index = BUFFER_COUNT - 1;
+  free.top_index = BUFFER_COUNT;
 
   asm("mov %0, %1":"=r"(free.stack[0]):"r"(g_buffer));
   for (unsigned i = 1; i < BUFFER_COUNT; i++)
@@ -17,8 +17,8 @@ void buffers_free_initialise(buffers_free_t &free)
 
 uintptr_t buffers_free_acquire(buffers_free_t &free)
 {
-  uintptr_t buffer = free.stack[free.top_index];
   free.top_index--;
+  uintptr_t buffer = free.stack[free.top_index];
   return buffer;
 }
 

@@ -16,39 +16,7 @@ void analyse_init()
   lock = hwlock_alloc();
 }
 
-void analyse(unsigned int buffer[])
-{
-  enhanced_packet_block_t *epb = (enhanced_packet_block_t *)buffer;
-
-  uint16_t ethertype;
-  void *payload;
-
-  ethernet_hdr_t *hdr = (ethernet_hdr_t *) &(epb->data);
-  ethertype = ntoh16(hdr->ethertype);
-  if (ethertype == 0x8100) {
-    tagged_ethernet_hdr_t *tagged_hdr = (tagged_ethernet_hdr_t *) &(epb->data);
-    ethertype = ntoh16(tagged_hdr->ethertype);
-    payload = &(tagged_hdr->payload);
-  } else {
-    payload = &(hdr->payload);
-  }
-
-  if (ethertype == AVB_1722_ETHERTYPE) {
-    AVB_DataHeader_t *avb_hdr = (AVB_DataHeader_t *)payload;
-    
-    unsigned int subtype = AVBTP_SUBTYPE(avb_hdr);
-    if (subtype == 0) {
-      stream_id_t id;
-      id.low  = AVBTP_STREAM_ID0(avb_hdr);
-      id.high = AVBTP_STREAM_ID1(avb_hdr);
-
-      if (id.low != 0 || id.high != 0)
-        increment_count(&id);
-    }
-  }
-}
-
-void increment_count(stream_id_t *id)
+void increment_count(const stream_id_t *id)
 {
   unsigned int free_index = MAX_NUM_STREAMS;
   hwlock_acquire(lock);
@@ -77,7 +45,40 @@ increment_count_done:
   hwlock_release(lock);
 }
 
-void check_counts()
+void analyse(const unsigned char *buffer, const unsigned int length_in_bytes)
+{
+  enhanced_packet_block_t *epb = (enhanced_packet_block_t *)buffer;
+
+  uint16_t ethertype;
+  void *payload;
+
+  ethernet_hdr_t *hdr = (ethernet_hdr_t *) &(epb->data);
+  ethertype = ntoh16(hdr->ethertype);
+
+  // Packet must be VLAN tagged
+  if (ethertype != 0x8100)
+    return;
+
+  tagged_ethernet_hdr_t *tagged_hdr = (tagged_ethernet_hdr_t *) &(epb->data);
+  ethertype = ntoh16(tagged_hdr->ethertype);
+  payload = &(tagged_hdr->payload);
+
+  if (ethertype != AVB_1722_ETHERTYPE)
+    return;
+
+  AVB_DataHeader_t *avb_hdr = (AVB_DataHeader_t *)payload;
+  unsigned int subtype = AVBTP_SUBTYPE(avb_hdr);
+  if (subtype == 0) {
+    stream_id_t id;
+    id.low  = AVBTP_STREAM_ID0(avb_hdr);
+    id.high = AVBTP_STREAM_ID1(avb_hdr);
+
+    if (id.low != 0 || id.high != 0)
+      increment_count(&id);
+  }
+}
+
+void check_counts(unsigned int now)
 {
   // First iteration to quickly grab the current counts
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
@@ -85,6 +86,7 @@ void check_counts()
     stream_counts[i].last_count = stream_counts[i].count;
   }
 
+  debug_printf("----\n", now);
   // Second iteration to do the printing
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
     if (stream_counts[i].id.low || stream_counts[i].id.high) {
