@@ -13,18 +13,28 @@
 #include <unistd.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #include "pcapng.h"
 
 #define DEBUG 0
 
+// Different event types to register and handle
+#define EVENT_DATA  0x2
+#define EVENT_PRINT 0x8
+
+// Need one byte for type, then 8 bytes of time stamp and 4 bytes of length
+#define PRINT_EVENT_BYTES 13
+
+// Data events have 16 bytes of overhead (event type, id, flag[2], length[4], timestamp[8])
+#define DATA_EVENT_HEADER_BYTES 8
+#define DATA_EVENT_BYTES 16
+
 #define MAX_RECV_BYTES 16384
 
 #define CAPTURE_LENGTH 64
-#define PCAPNG_EPB_BYTES 36
 
-// Buffers will come in frames that are the data with 16 bytes of overhead (event type, id, flag[2], length[4], timestamp[8])
-#define FRAME_SIZE (CAPTURE_LENGTH + 16) + PCAPNG_EPB_BYTES
+#define EXTRACT_UINT(buf, pos) (buf[pos] | (buf[pos+1] << 8) | (buf[pos+2] << 16) | (buf[pos+3] << 24))
 
 void emit_section_header_block(FILE *f)
 {
@@ -115,8 +125,8 @@ int main(int argc, char *argv[])
   emit_interface_description_block(g_pcap_fptr);
   emit_interface_description_block(g_pcap_fptr);
 
-  // Send the '2' command which is requesting receiving xscope event records
-  recv_buffer[0] = 2;
+  // Send the command to request which event types to receive
+  recv_buffer[0] = EVENT_DATA | EVENT_PRINT;
   n = send(sockfd, recv_buffer, 1, 0);
   if (n != 1) {
     printf("ERROR: Command send failed\n");
@@ -132,7 +142,7 @@ int main(int argc, char *argv[])
     int i;
 
     if (DEBUG)
-      fprintf(g_log, "Received %d", n);
+      fprintf(g_log, ">> Received %d", n);
 
     n += num_remaining_bytes;
     num_remaining_bytes = 0;
@@ -145,18 +155,58 @@ int main(int argc, char *argv[])
       fprintf(g_log, "\n");
     }
 
-    for (i = 0; i < n; i += FRAME_SIZE) {
-      if (recv_buffer[0] != 2) {
-        printf("ERROR: Message format corrupted\n");
+    for (i = 0; i < n; ) {
+      // Indicate when a block of data has been handled by the fact that the pointer can move on
+      int increment = 0;
+
+      if (recv_buffer[0] == EVENT_PRINT) {
+        unsigned int string_len = 0;
+
+        // Need one byte for type, then 8 bytes of time stamp and 4 bytes of length
+        if ((i + PRINT_EVENT_BYTES) <= n) {
+          unsigned int string_len = EXTRACT_UINT(recv_buffer, 9);
+
+          // Ensure the buffer won't overflow
+          assert(string_len < MAX_RECV_BYTES);
+          int string_start = i + PRINT_EVENT_BYTES;
+          int string_end = i + PRINT_EVENT_BYTES + string_len;
+          if (string_end <= n) {
+            // Ensure the string is null-terminated
+            unsigned char tmp = recv_buffer[string_end];
+            recv_buffer[string_end] = '\0';
+
+            fwrite(&recv_buffer[string_start], sizeof(unsigned char), string_len, stdout);
+            if (DEBUG)
+              fprintf(g_log, "Found string length (%d) %02x '%s'\n", string_len, tmp, &recv_buffer[string_start]);
+
+            recv_buffer[string_end] = tmp;
+
+            increment = PRINT_EVENT_BYTES + string_len;
+          }
+        }
+
+      } else if (recv_buffer[0] == EVENT_DATA) {
+        if ((i + DATA_EVENT_HEADER_BYTES) <= n) {
+          unsigned int packet_len = EXTRACT_UINT(recv_buffer, 4);
+
+          if ((i + packet_len + DATA_EVENT_BYTES) <= n) {
+            // An entire packet has been received - write it to the file
+            total_bytes += packet_len;
+
+            // Data starts after the message header
+            int data_start = i + DATA_EVENT_HEADER_BYTES;
+            fwrite(&recv_buffer[data_start], packet_len, 1, g_pcap_fptr);
+            increment = packet_len + DATA_EVENT_BYTES;
+          }
+        }
+
+      } else {
+        printf("ERROR: Message format corrupted (received %u)\n", recv_buffer[0]);
         exit(1);
       }
 
-      if ((i + FRAME_SIZE) <= n) {
-        // An entire packet has been received - write it to the file
-        total_bytes += CAPTURE_LENGTH;
-
-        // Data starts after the message header
-        fwrite(&recv_buffer[i + 8], CAPTURE_LENGTH + PCAPNG_EPB_BYTES, 1, g_pcap_fptr);
+      if (increment) {
+        i += increment;
 
       } else {
         // Only part of the packet received - store rest for next iteration
@@ -164,11 +214,11 @@ int main(int argc, char *argv[])
         memmove(recv_buffer, &recv_buffer[i], num_remaining_bytes);
 
         if (DEBUG)
-          fprintf(g_log, "%d remaining\n ", num_remaining_bytes);
+          fprintf(g_log, "%d remaining\n", num_remaining_bytes);
+
+        break;
       }
     }
-
-    printf("\r%d", total_bytes);
   }
 
   return 0;
