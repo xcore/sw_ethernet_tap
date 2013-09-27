@@ -1,6 +1,11 @@
 /*
- * Note that the device should be launched with:
+ * Note that the device and listener should be run with the same port and IP.
+ * For example:
+ *
  *  xrun --xscope-realtime --xscope-port 127.0.0.1:12346 ...
+ *
+ *  ./pcapng_listener 127.0.0.1 12346
+ *
  */
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -94,8 +99,8 @@ int main(int argc, char *argv[])
 
   signal(SIGINT, int_handler);
 
-  if (argc != 2) {
-    printf("Usage: %s <ip of server>\n", argv[0]);
+  if (argc != 3) {
+    printf("Usage: %s <ip of server> <port>\n", argv[0]);
     exit(1);
   }
 
@@ -106,8 +111,16 @@ int main(int argc, char *argv[])
 
   memset(&serv_addr, 0, sizeof(serv_addr));
 
+  // Parse the port parameter
+  char *end_pointer = argv[2];
+  int port = strtol(argv[2], &end_pointer, 10);
+  if (end_pointer == argv[2]) {
+    printf("ERROR: Failed to parse port '%s'\n", argv[2]);
+    exit(1);
+  }
+
   serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(12346);
+  serv_addr.sin_port = htons(port);
 
   if (inet_pton(AF_INET, argv[1], &serv_addr.sin_addr) <= 0) {
     printf("ERROR: inet_pton error occured\n");
