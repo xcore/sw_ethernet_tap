@@ -155,9 +155,9 @@ void handle_socket(int sockfd)
           }
         }
 
-      } else if (recv_buffer[0] == EVENT_DATA) {
+      } else if (recv_buffer[i] == EVENT_DATA) {
         if ((i + DATA_EVENT_HEADER_BYTES) <= n) {
-          int packet_len = EXTRACT_UINT(recv_buffer, 4);
+          int packet_len = EXTRACT_UINT(recv_buffer, i + 4);
 
           if ((i + packet_len + DATA_EVENT_BYTES) <= n) {
             // Data starts after the message header
