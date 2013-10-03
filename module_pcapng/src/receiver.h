@@ -1,6 +1,8 @@
 #ifndef __RECEIVER_H__
 #define __RECEIVER_H__
 
+#include <xs1.h>
+
 interface pcapng_timer_interface {
   unsigned int get_top_bits(unsigned int time);
 };
