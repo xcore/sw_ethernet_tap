@@ -130,6 +130,7 @@ int xscope_ep_request_upload(int sockfd, unsigned int length,
   char request = XSCOPE_SOCKET_MSG_EVENT_TARGET_DATA;
   char *requestBuffer = (char *)malloc(sizeof(char)+sizeof(int)+length);
   int requestBufIndex = 0;
+  int n = 0;
 
   if (xscope_ep_upload_pending == 1)
     return XSCOPE_EP_FAILURE;
@@ -139,9 +140,9 @@ int xscope_ep_request_upload(int sockfd, unsigned int length,
   *(unsigned int *)&requestBuffer[requestBufIndex] = length;
   requestBufIndex += 4;
   memcpy(&requestBuffer[requestBufIndex], data, length);
-  requestBufIndex+=length;
+  requestBufIndex += length;
 
-  int n = send(sockfd, requestBuffer, requestBufIndex, 0);
+  n = send(sockfd, requestBuffer, requestBufIndex, 0);
   if (n != requestBufIndex)
     error("ERROR: Command send failed\n");
 
@@ -305,7 +306,11 @@ char get_next_char(char *buffer)
 /*
  * A separate thread to handle user commands to control the target.
  */
+#ifdef _WIN32
+DWORD WINAPI console_thread(void *arg)
+#else
 void *console_thread(void *arg)
+#endif
 {
   int sockfd = *(int *)arg;
   char buffer[LINE_LENGTH + 1];
@@ -342,12 +347,20 @@ void *console_thread(void *arg)
     }
   } while (1);
 
+#ifdef _WIN32
+  return 0;
+#else
   return NULL;
+#endif
 }
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  HANDLE thread;
+#else
   pthread_t tid;
+#endif
   int err = 0;
   int sockfd = 0;
   int n = 0;
@@ -418,9 +431,15 @@ int main(int argc, char *argv[])
   printf("Connected\n");
 
   // Now start the console
+#ifdef _WIN32
+  thread = CreateThread(NULL, 0, console_thread, &sockfd, 0, NULL);
+  if (thread == NULL)
+    error("ERROR: Failed to create console thread\n");
+#else
   err = pthread_create(&tid, NULL, &console_thread, &sockfd);
   if (err != 0)
     error("ERROR: Failed to create console thread\n");
+#endif
 
   handle_socket(sockfd);
 
