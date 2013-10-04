@@ -55,7 +55,11 @@ char get_next_char(char *buffer)
 /*
  * A separate thread to handle user commands to control the target.
  */
+#ifdef _WIN32
+DWORD WINAPI console_thread(void *arg)
+#else
 void *console_thread(void *arg)
+#endif
 {
   int sockfd = *(int *)arg;
   char buffer[LINE_LENGTH + 1];
@@ -92,12 +96,20 @@ void *console_thread(void *arg)
     }
   } while (1);
 
+#ifdef _WIN32
+  return 0;
+#else
   return NULL;
+#endif
 }
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  HANDLE thread;
+#else
   pthread_t tid;
+#endif
   int err = 0;
   int sockfd = initialise_common(argc, argv);
 
@@ -109,9 +121,15 @@ int main(int argc, char *argv[])
   emit_interface_description_block(g_pcap_fptr);
 
   // Now start the console
+#ifdef _WIN32
+  thread = CreateThread(NULL, 0, console_thread, &sockfd, 0, NULL);
+  if (thread == NULL)
+    print_and_exit("ERROR: Failed to create console thread\n");
+#else
   err = pthread_create(&tid, NULL, &console_thread, &sockfd);
   if (err != 0)
     print_and_exit("ERROR: Failed to create console thread\n");
+#endif
 
   handle_socket(sockfd);
 

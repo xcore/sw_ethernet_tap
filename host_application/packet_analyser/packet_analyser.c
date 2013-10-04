@@ -8,7 +8,6 @@
  *
  */
 #include "shared.h"
-#include "avb_tester.h"
 #include "analysis_utils.h"
 
 // Need to define this as NULL to indicate that there is no console being used

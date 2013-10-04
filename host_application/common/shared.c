@@ -113,6 +113,7 @@ int xscope_ep_request_upload(int sockfd, unsigned int length, const unsigned cha
   char request = XSCOPE_SOCKET_MSG_EVENT_TARGET_DATA;
   char *requestBuffer = (char *)malloc(sizeof(char)+sizeof(int)+length);
   int requestBufIndex = 0;
+  int n = 0;
 
   if (xscope_ep_upload_pending == 1)
     return XSCOPE_EP_FAILURE;
@@ -122,9 +123,9 @@ int xscope_ep_request_upload(int sockfd, unsigned int length, const unsigned cha
   *(unsigned int *)&requestBuffer[requestBufIndex] = length;
   requestBufIndex += 4;
   memcpy(&requestBuffer[requestBufIndex], data, length);
-  requestBufIndex+=length;
+  requestBufIndex += length;
 
-  int n = send(sockfd, requestBuffer, requestBufIndex, 0);
+  n = send(sockfd, requestBuffer, requestBufIndex, 0);
   if (n != requestBufIndex)
     print_and_exit("ERROR: Command send failed\n");
 
@@ -292,7 +293,6 @@ void emit_interface_description_block(FILE *f)
     CAPTURE_LENGTH,                         // SnapLen
     // Options
     { 0x09, 0x01, 0x08 },                       // if_tsresol (10^-8)
-
     sizeof(interface_description_block_t)   // Block Total Length
   };
   fwrite(&iface, sizeof(iface), 1, f);
