@@ -4,13 +4,11 @@
  */
 #include "buffers.h"
 
-unsigned char g_buffer[MAX_BUFFER_SIZE * BUFFER_COUNT];
-
 void buffers_free_initialise(buffers_free_t &free)
 {
   free.top_index = BUFFER_COUNT;
 
-  asm("mov %0, %1":"=r"(free.stack[0]):"r"(g_buffer));
+  buffers_free_initialise_c(free);
   for (unsigned i = 1; i < BUFFER_COUNT; i++)
     free.stack[i] = free.stack[i - 1] + MAX_BUFFER_SIZE;
 }

@@ -2,7 +2,6 @@
 #include "analysis_tile.h"
 
 #include "buffers.h"
-#include "util.h"
 #include "analysis_utils.h"
 #include "debug_print.h"
 #include "xassert.h"
@@ -10,8 +9,7 @@
 
 #define TIMER_TICKS_PER_SECOND 100000000
 
-void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analysis,
-    chanend c_outputter_to_control)
+void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analysis)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -40,14 +38,10 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
         }
         break;
       }
-      case c_outputter_to_control :> uintptr_t buffer : {
-        // Buffer fully processed - release it
-        buffers_free_release(free_buffers, buffer);
-        break;
-      }
       case analysis_active => c_control_to_analysis :> uintptr_t buffer : {
-        // Analysis complete - can pass it another buffer
+        // Analysis complete - release the buffer
         analysis_active = 0;
+        buffers_free_release(free_buffers, buffer);
         break;
       }
       work_pending && !analysis_active => default : {
@@ -94,7 +88,7 @@ void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control)
   }
 }
 
-void analyser(chanend c_control_to_analysis, chanend c_analysis_to_outputter)
+void analyser(chanend c_control_to_analysis)
 {
   while (1) {
     uintptr_t buffer;
@@ -103,45 +97,15 @@ void analyser(chanend c_control_to_analysis, chanend c_analysis_to_outputter)
       c_control_to_analysis :> buffer;
       c_control_to_analysis :> length_in_bytes;
     }
-    analyse_buffer(buffer, length_in_bytes);
-
-    // Pass the buffer on to the outputter
-    c_analysis_to_outputter <: buffer;
-    c_analysis_to_outputter <: length_in_bytes;
+    analyse_buffer(buffer);
 
     // Tell the control the analysis is ready for the next buffer
     c_control_to_analysis <: buffer;
   }
 }
 
-void xscope_outputter(server interface outputter_config i_config,
-    chanend c_analysis_to_outputter, chanend c_outputter_to_control)
-{
-  int send_packets_over_xscope = 0;
-
-  while (1) {
-    uintptr_t buffer;
-    select {
-      case c_analysis_to_outputter :> buffer : {
-        unsigned length_in_bytes;
-        c_analysis_to_outputter :> length_in_bytes;
-        if (send_packets_over_xscope)
-          xscope_bytes_c(0, length_in_bytes, buffer);
-        c_outputter_to_control <: buffer;
-        break;
-      }
-      case i_config.set_output_packets(int enabled) : {
-        send_packets_over_xscope = enabled;
-        debug_printf("xscope packet output %s\n", enabled ? "enabled" : "disabled");
-        break;
-      }
-    }
-  }
-}
-
 void periodic_checks(server interface analysis_config i_config)
 {
-  unsigned int expect_oversubscribed = 0;
   timer tmr;
   int time;
 
@@ -152,13 +116,7 @@ void periodic_checks(server interface analysis_config i_config)
     select {
       case tmr when timerafter(time) :> void : {
         time += TIMER_TICKS_PER_SECOND;
-        check_counts(expect_oversubscribed);
-        break;
-      }
-      case i_config.set_expect_oversubscribed(int oversubscribed) : {
-        expect_oversubscribed = oversubscribed;
-        debug_printf("Expecting %s\n",
-            expect_oversubscribed ? "oversubscribed" : "normal");
+        check_counts();
         break;
       }
     }
