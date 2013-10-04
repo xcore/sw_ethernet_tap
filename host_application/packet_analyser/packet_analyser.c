@@ -18,8 +18,14 @@ void hook_data_received(void *data, int data_len)
   interface_state_t *state = (interface_state_t *)data;
   double mega_bits_per_second = (state->byte_snapshot * 8.0) / 1000000.0;
 
-  printf("%s %6d packets %10d bytes %3.2f Mb/s", state->interface_id ? " | DOWN" : "UP",
-      state->packet_snapshot, state->byte_snapshot, mega_bits_per_second);
+  const unsigned int preamble_bytes = 8;
+  const unsigned int ifg_bytes = 96/8;
+  const unsigned int used_bytes = state->byte_snapshot + (state->packet_snapshot * (preamble_bytes + ifg_bytes));
+  const unsigned int used_bits = used_bytes * 8;
+  double utilisation = (used_bits / 100000000.0) * 100.0;
+
+  printf("| %7d | %8d | %6.2f | %6.2f %% |",
+      state->packet_snapshot, state->byte_snapshot, mega_bits_per_second, utilisation);
 
   if (state->interface_id) {
     printf("\n");
@@ -35,6 +41,10 @@ void hook_exiting()
 int main(int argc, char *argv[])
 {
   int sockfd = initialise_common(argc, argv);
+
+  printf("|                 UP                     ||                  DOWN                  |\n");
+  printf("| Packets | Bytes    | Mb/s   | %% util   || Packets | Bytes    | Mb/s   | %% util   |\n");
+
   handle_socket(sockfd);
   return 0;
 }
