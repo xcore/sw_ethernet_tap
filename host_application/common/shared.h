@@ -28,6 +28,7 @@
 #include <assert.h>
 
 #include "pcapng.h"
+#include "pcap.h"
 
 #define XSCOPE_EP_SUCCESS 0
 #define XSCOPE_EP_FAILURE 1
@@ -53,11 +54,14 @@
 
 #define EXTRACT_UINT(buf, pos) (buf[pos] | (buf[pos+1] << 8) | (buf[pos+2] << 16) | (buf[pos+3] << 24))
 
+#define DEFAULT_SERVER_IP "127.0.0.1"
+#define DEFAULT_PORT "12346"
+
 #ifdef __XC__
 extern "C" {
 #endif
 
-int initialise_common();
+int initialise_common(char *ip_addr_str, char *port_str);
 void interrupt_handler(int sig);
 void print_and_exit(const char* format, ...);
 
@@ -71,8 +75,9 @@ int xscope_ep_request_upload(int sockfd, unsigned int length, const unsigned cha
 
 void handle_socket(int sockfd);
 
-void emit_section_header_block(FILE *f);
-void emit_interface_description_block(FILE *f);
+void emit_pcap_header(FILE *f);
+void emit_pcapng_section_header_block(FILE *f);
+void emit_pcapng_interface_description_block(FILE *f);
 
 #ifdef __XC__
 }

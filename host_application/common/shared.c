@@ -19,7 +19,7 @@ void hook_exiting();
 // no console on the host.
 extern const char *g_prompt;
 
-int initialise_common(int argc, char *argv[])
+int initialise_common(char *ip_addr_str, char *port_str)
 {
   int sockfd = 0;
   int n = 0;
@@ -32,9 +32,6 @@ int initialise_common(int argc, char *argv[])
     g_log = fopen("run.log", "w");
 
   signal(SIGINT, interrupt_handler);
-
-  if (argc != 3)
-    print_and_exit("Usage: %s <ip of server> <port>\n", argv[0]);
 
 #ifdef _WIN32
   {
@@ -58,15 +55,15 @@ int initialise_common(int argc, char *argv[])
   memset(&serv_addr, 0, sizeof(serv_addr));
 
   // Parse the port parameter
-  end_pointer = (char*)argv[2];
-  port = strtol(argv[2], &end_pointer, 10);
-  if (end_pointer == argv[2])
+  end_pointer = (char*)port_str;
+  port = strtol(port_str, &end_pointer, 10);
+  if (end_pointer == port_str)
     print_and_exit("ERROR: Failed to parse port\n");
 
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_port = htons(port);
 
-  if (inet_pton(AF_INET, argv[1], &serv_addr.sin_addr) <= 0)
+  if (inet_pton(AF_INET, ip_addr_str, &serv_addr.sin_addr) <= 0)
     print_and_exit("ERROR: inet_pton error occured\n");
 
   if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
@@ -268,7 +265,21 @@ void handle_socket(int sockfd)
   }
 }
 
-void emit_section_header_block(FILE *f)
+void emit_pcap_header(FILE *f)
+{
+  pcap_hdr_t header = {
+    0xA1B2C3D4,             // Byte-Order Magic
+    0x2,                    // Major Version
+    0x4,                    // Minor Version
+    0x0,                    // Time zone (GMT)
+    0x0,                    // Accuracy - simply set 0
+    CAPTURE_LENGTH,         // Snaplength
+    DATA_LINK_ETHERNET,     // Data link type
+  };
+  fwrite(&header, sizeof(header), 1, f);
+}
+
+void emit_pcapng_section_header_block(FILE *f)
 {
   section_block_header_t header = {
     0x0A0D0D0A,             // Block Type
@@ -283,7 +294,7 @@ void emit_section_header_block(FILE *f)
   fwrite(&header, sizeof(header), 1, f);
 }
 
-void emit_interface_description_block(FILE *f)
+void emit_pcapng_interface_description_block(FILE *f)
 {
   interface_description_block_t iface = {
     0x1,                                    // Block Type
