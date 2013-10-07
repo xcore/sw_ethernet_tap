@@ -14,43 +14,43 @@ enum pcap_ng_block_type_t {
 };
 
 typedef struct section_block_header_t {
-    unsigned int block_type;
-    unsigned int block_total_len_pre;
-    unsigned int byte_order_magic;
-    unsigned short major_version;
-    unsigned short minor_version;
-    unsigned long long section_length;
-    unsigned int options;
-    unsigned int block_total_len_post;
+    uint32_t block_type;
+    uint32_t block_total_len_pre;
+    uint32_t byte_order_magic;
+    uint16_t major_version;
+    uint16_t minor_version;
+    uint64_t section_length;
+    uint32_t options;
+    uint32_t block_total_len_post;
 } section_block_header_t;
 
 typedef struct option_if_tsresol_t {
-    unsigned short type;
-    unsigned short length;
-    unsigned char value;
+    uint16_t type;
+    uint16_t length;
+    uint8_t value;
 } option_if_tsresol_t;
 
 typedef struct interface_description_block_t {
-    unsigned int block_type;
-    unsigned int block_total_len_pre;
-    unsigned short link_type;
-    unsigned short reserved;
-    unsigned int snap_len;
+    uint32_t block_type;
+    uint32_t block_total_len_pre;
+    uint16_t link_type;
+    uint16_t reserved;
+    uint32_t snap_len;
     option_if_tsresol_t if_tsresol;
-    unsigned int block_total_len_post;
+    uint32_t block_total_len_post;
 } interface_description_block_t;
 
 typedef struct enhanced_packet_block_t {
-    unsigned int block_type;
-    unsigned int block_total_len_pre;
-    unsigned int interface_id;
-    unsigned int timestamp_high;
-    unsigned int timestamp_low;
-    unsigned int captured_len;
-    unsigned int packet_len;
-    unsigned int *data;
-    unsigned int *options;
-    unsigned int block_total_len_post;
+    uint32_t block_type;
+    uint32_t block_total_len_pre;
+    uint32_t interface_id;
+    uint32_t timestamp_high;
+    uint32_t timestamp_low;
+    uint32_t captured_len;
+    uint32_t packet_len;
+    uint32_t *data;
+    uint32_t *options;
+    uint32_t block_total_len_post;
 } enhanced_packet_block_t;
 
 // The overhead of the Enhanced Packet Block structure (everything but the data pointer)

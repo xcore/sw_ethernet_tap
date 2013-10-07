@@ -32,11 +32,11 @@ void analyse_buffer(const unsigned char *buffer);
 typedef struct {
   uint64_t total_byte_count;
   uint64_t total_packet_count;
-  unsigned int interface_id;
-  unsigned int byte_count;             // Byte count in the current window
-  unsigned int byte_snapshot;
-  unsigned int packet_count;           // Packet count in the current window
-  unsigned int packet_snapshot;
+  uint32_t interface_id;
+  uint32_t byte_count;             // Byte count in the current window
+  uint32_t byte_snapshot;
+  uint32_t packet_count;           // Packet count in the current window
+  uint32_t packet_snapshot;
 } interface_state_t;
 
 void check_counts();
