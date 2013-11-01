@@ -8,7 +8,7 @@
  *
  */
 #include "shared.h"
-#include "traffic_gen_host_cmds.h"
+#include "traffic_ctlr_host_cmds.h"
 
 /*
  * Includes for thread support
@@ -26,6 +26,7 @@ const char *g_prompt = " > ";
 
 // Indicate whether the output should be pcap or pcapng
 int g_libpcap_mode = 0;
+char g_generator_mode = 's';  //indicates mode of the device generator
 
 void hook_data_received(void *data, int data_len)
 {
@@ -54,17 +55,29 @@ void hook_exiting()
   fclose(g_pcap_fptr);
 }
 
+void print_traffic_gen_cmd_usage()
+{
+  printf("  c <pkt_typ & wt & sz_min & sz_max> : tell traffic generator to apply specified weight(wt) and packet sizes (sz_min and sz_max) \n");
+  printf("              for a (u)nicast, (m)ulticast or a (b)roadcast packet type (pkt_typ)\n");
+}
+
+void print_traffic_gen_controller_cmd_usage()
+{
+  printf("  g <pkt_typ & wt & ln_rt>         : tell traffic generator to control packet generation for a (u)nicast, (m)ulticast \n");
+  printf("              or a (b)roadcast packet type (pkt_typ) by applying specified weight (wt) and line rate (ln_rt) \n");
+}
+
 void print_console_usage()
 {
   printf("Supported commands:\n");
   printf("  h|?       : print this help message\n");
-  printf("  r <ln_rt> : tell traffic generator to use the specified line rate for traffic generation\n");
+//  printf("  r <ln_rt> : tell traffic generator to use the specified line rate for traffic generation\n");
   printf("  m <s|r|d> : tell traffic generator to use any of the (s)ilent, (r)andom mode or (d)irected mode for traffic generation\n");
-  printf("  b <w&s>   : tell traffic generator to generate (b)roadcast packets using specified (w)eight and packet (s)ize\n");
-  printf("  x <w&s>   : tell traffic generator to generate multicast(x) packets using specified (w)eight and packet (s)ize\n");
-  printf("  u <w&s>   : tell traffic generator to generate (u)nicast packets using specified (w)eight and packet (s)ize\n");
+  print_traffic_gen_cmd_usage();
+  print_traffic_gen_controller_cmd_usage();
   printf("  e         : tell traffic generator about the end of commands for the current packet generation request.\n");
-  printf("              every command sequence must be followed by this command\n");
+  printf("              every command sequence must be followed by this command for any (d)irected generation requests\n");
+  printf("  p         : tell traffic generator to display 'directed' packet generation configuration details.\n");
   printf("  q         : quit\n");
 }
 
@@ -73,12 +86,33 @@ void print_console_usage()
 static char get_next_char(char *buffer)
 {
   char *ptr = buffer;
+  int len=0;
   while (*ptr && isspace(*ptr))
     ptr++;
+
   return *ptr;
 }
 
-/* This function converts an ascii  string to integer and returns its string length */
+static char get_next_string(char *buffer, int *str_len)
+{
+  char *str_ptr = buffer;
+  char *ptr = buffer;
+  int len=0;
+
+  while (*str_ptr && isspace(*str_ptr))
+    str_ptr++;
+
+  while (*ptr && !isspace(*ptr)) {
+	ptr++;
+	len++;
+  }
+
+  *str_len = len;
+  return *str_ptr;
+}
+
+
+/* This function converts an ascii string to integer and returns its string length */
 static int convert_atoi_substr(const char *buffer, int *len)
 {
   char *ptr = buffer;
@@ -98,39 +132,113 @@ static int convert_atoi_substr(const char *buffer, int *len)
   return (atoi(&buffer[i]));
 }
 
-static int validate_pkt_setting(const char *buffer)
+static int validate_directed_mode_setting()
 {
-  int weight = 0, pkt_size = 0, len = 0;
-  weight = convert_atoi_substr(&buffer[2], &len);
-  pkt_size = convert_atoi_substr(&buffer[2+len], &len);
+  if (g_generator_mode == 'd') {
+    printf("Packet generator is running in (d)irected mode! \n");
+    printf("Change the mode to (s)ilent or (r)andom before modifying directed mode configuration. \n");
+    return 0;
+  }
 
+  return 1;
+}
+
+static int validate_pkt_ctrl_setting(const char *buffer)
+{
+  int len = 0;
+  char pkt_type = 'z';
+  int index = 0;
+  int weight = 0;
+  int pkt_size_min = 0;
+  int pkt_size_max = 0;
+
+  if (!validate_directed_mode_setting())
+    return 0;
+
+  index = 2; //after ignoring the command and white space
+  pkt_type = get_next_string(&buffer[2], &len);
+
+  if ((pkt_type != 'u') && (pkt_type != 'm') && (pkt_type != 'b')) {
+    printf("Invalid packet type; specify either a (u)nicast, (m)ulticast or a (b)roadcast packet type \n");
+    print_traffic_gen_cmd_usage();
+    return 0;
+  }
+
+  index += len+1; //1 for white space
+  weight = convert_atoi_substr(&buffer[index], &len);
   if ((weight <= 0) || (weight > 100)) {
     printf("Invalid weight; specify a value between 1 and 99 \n");
-    printf("Specify a valid (w)eight and packet (s)ize \n");
+    print_traffic_gen_cmd_usage();
     return 0;
   }
 
-  if ((pkt_size <= 0) || (pkt_size > 1500)) {
-    printf("Invalid pkt_size; specify a value between 1 and 1500 \n");
-    printf("Specify a valid (w)eight and packet (s)ize \n");
+
+  index += len+1;
+  pkt_size_min = convert_atoi_substr(&buffer[index], &len);
+  if ((pkt_size_min <= 0) || (pkt_size_min > 1500)) {
+    printf("Invalid min pkt_size; specify a value between 1 and 1500 \n");
+    print_traffic_gen_cmd_usage();
+    return 0;
+  }
+
+  index += len+1;
+  pkt_size_max = convert_atoi_substr(&buffer[index], &len);
+  if ((pkt_size_max < 1) || (pkt_size_max > 1500)) {
+    printf("Invalid max pkt_size; specify a value between 1 and 1500 \n");
+    print_traffic_gen_cmd_usage();
+    return 0;
+  }
+
+  if (pkt_size_min > pkt_size_max) {
+    printf("pkt_size_max value should be greater or equal to pkt_size_min \n");
+    print_traffic_gen_cmd_usage();
     return 0;
   }
 
   return 1;
 }
 
-static int validate_line_rate(const char *buffer)
+
+static int validate_pkt_generation_ctrl_setting(const char *buffer)
 {
-  unsigned line_rate = 0, len = 0;
-  line_rate = convert_atoi_substr(&buffer[2], &len);
+  int len = 0;
+  char pkt_type = 'z';
+  int index = 0;
+  int weight = 0;
+  int rate = 0;
 
-  if ((line_rate <= 0) || (line_rate > 100)) {
-    printf("Invalid line rate; specify a value between 1 and 99 \n");
+  if (!validate_directed_mode_setting())
+    return 0;
+
+  index = 2; //after ignoring the command and white space
+  pkt_type = get_next_string(&buffer[2], &len);
+
+  if ((pkt_type != 'u') && (pkt_type != 'm') && (pkt_type != 'b')) {
+    printf("Invalid packet type; specify either a (u)nicast, (m)ulticast or a (b)roadcast packet type \n");
+    print_traffic_gen_controller_cmd_usage();
+    return 0;
+  }
+
+  index += len+1; //1 for white space
+  weight = convert_atoi_substr(&buffer[index], &len);
+  if ((weight <= 0) || (weight > 100)) {
+    printf("Invalid weight; specify a value between 1 and 99 \n");
+    print_traffic_gen_controller_cmd_usage();
+    return 0;
+  }
+
+
+  index += len+1;
+  rate = convert_atoi_substr(&buffer[index], &len);
+  if ((rate <= 0) || (rate > 100)) {
+    printf("Invalid rate; specify a value between 1 and 100 \n");
+    print_traffic_gen_controller_cmd_usage();
     return 0;
   }
 
   return 1;
 }
+
 
 static int validate_mode(const char *buffer)
 {
@@ -141,6 +249,8 @@ static int validate_mode(const char *buffer)
     printf("Invalid mode; specify any of (s)ilent, (r)andom mode or (d)irected mode \n");
     return 0;
   }
+  else
+    g_generator_mode = mode;
 
   return 1;
 }
@@ -158,6 +268,7 @@ void *console_thread(void *arg)
   char buffer[LINE_LENGTH + 1];
   do {
     int i = 0;
+    int j = 0;
     int c = 0;
 
     printf("%s", g_prompt);
@@ -165,24 +276,26 @@ void *console_thread(void *arg)
       buffer[i] = tolower(c);
     buffer[i] = '\0';
 
-    switch (buffer[0]) {
-      case SET_LINE_RATE:
-        if (validate_line_rate(buffer))
-          xscope_ep_request_upload(sockfd, i, buffer);
-        break;
+    for (j = i; j < LINE_LENGTH; j++)
+      buffer[j] = '\0';
 
+    switch (buffer[0]) {
       case SET_GENERATOR_MODE:
         if (validate_mode(buffer))
           xscope_ep_request_upload(sockfd, 3, buffer);
         break;
 
-      case BROADCAST_SETTING:
-      case MULTICAST_SETTING:
-      case UNICAST_SETTING:
-        if (validate_pkt_setting(buffer))
+      case PKT_CONTROL:
+        if (validate_pkt_ctrl_setting(buffer))
           xscope_ep_request_upload(sockfd, i, buffer);
 	    break;
 
+      case PKT_GENERATION_CONTROL:
+        if (validate_pkt_generation_ctrl_setting(buffer))
+          xscope_ep_request_upload(sockfd, i, buffer);
+	    break;
+
+      case PRINT_PKT_CONFIGURATION:
       case END_OF_CMD:
         xscope_ep_request_upload(sockfd, 1, buffer);
 	    break;
