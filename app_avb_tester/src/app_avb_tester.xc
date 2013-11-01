@@ -45,42 +45,47 @@ void xscope_user_init()
  * \brief   A core that listens to data being sent from the host and
  *          informs the analysis engine of any changes
  */
-void xscope_listener(client interface analysis_config i_checker_config,
+void xscope_listener(chanend c_host_data,
+                     client interface analysis_config i_checker_config,
                      client interface outputter_config i_outputter_config)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
 
+  xscope_connect_data_from_host(c_host_data);
   while (1) {
-    unsigned int num_read = xscope_upload_bytes(-1, (unsigned char *)&buffer[0]);
+    int bytes_read = 0;
+    select {
+      case xscope_data_from_host(c_host_data, (unsigned char *)buffer, bytes_read):
+        if (bytes_read == 4) {
+          // Expecting a word from the host which indicates the command
+          tester_command_t cmd = buffer[0];
+          switch (cmd) {
+            case AVB_TESTER_EXPECT_NORMAL:
+              i_checker_config.set_expect_oversubscribed(0);
+              break;
 
-    if (num_read == 4) {
-      // Expecting a word from the host which indicates the command
-      tester_command_t cmd = buffer[0];
-      switch (cmd) {
-        case AVB_TESTER_EXPECT_NORMAL:
-          i_checker_config.set_expect_oversubscribed(0);
-          break;
+            case AVB_TESTER_EXPECT_OVERSUBSCRIBED:
+              i_checker_config.set_expect_oversubscribed(1);
+              break;
 
-        case AVB_TESTER_EXPECT_OVERSUBSCRIBED:
-          i_checker_config.set_expect_oversubscribed(1);
-          break;
+            case AVB_TESTER_XSCOPE_PACKETS_ENABLE:
+              i_outputter_config.set_output_packets(1);
+              break;
 
-        case AVB_TESTER_XSCOPE_PACKETS_ENABLE:
-          i_outputter_config.set_output_packets(1);
-          break;
+            case AVB_TESTER_XSCOPE_PACKETS_DISABLE:
+              i_outputter_config.set_output_packets(0);
+              break;
 
-        case AVB_TESTER_XSCOPE_PACKETS_DISABLE:
-          i_outputter_config.set_output_packets(0);
-          break;
+            default:
+              debug_printf("Unrecognised command '%d' received from host\n", cmd);
+              break;
+          }
 
-        default:
-          debug_printf("Unrecognised command '%d' received from host\n", cmd);
-          break;
-      }
-
-    } else if (num_read != 0) {
-      debug_printf("ERROR: Received '%d' bytes\n", num_read);
+        } else if (bytes_read != 0) {
+          debug_printf("ERROR: Received '%d' bytes\n", bytes_read);
+        }
+        break;
     }
   }
 }
@@ -93,8 +98,11 @@ enum {
 
 int main()
 {
+  chan c_host_data;
   chan c_inter_tile;
   par {
+    xscope_host_data(c_host_data);
+
     on tile[ANALYSIS_TILE]: {
       chan c_receiver_to_control;
       chan c_control_to_analysis;
@@ -112,7 +120,7 @@ int main()
         xscope_outputter(i_outputter_config, c_analysis_to_outputter,
             c_outputter_to_control);
         periodic_checks(i_checker_config);
-        xscope_listener(i_checker_config, i_outputter_config);
+        xscope_listener(c_host_data, i_checker_config, i_outputter_config);
       }
     }
 
