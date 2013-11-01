@@ -40,6 +40,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "pcapng.h"
 #include "pcap.h"
