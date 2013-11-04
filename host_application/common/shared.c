@@ -225,6 +225,11 @@ void handle_socket(int sockfd)
         if ((i + DATA_EVENT_HEADER_BYTES) <= n) {
           int packet_len = EXTRACT_UINT(recv_buffer, i + 4);
 
+          // Fixed-length data packets are encoded with a length of 0
+          // but actually carry 8 bytes of data
+          if (packet_len == 0)
+            packet_len = 8;
+
           if ((i + packet_len + DATA_EVENT_BYTES) <= n) {
             // Data starts after the message header
             int data_start = i + DATA_EVENT_HEADER_BYTES;
