@@ -245,7 +245,7 @@ void handle_socket(int sockfd)
         }
 
       } else {
-        print_and_exit("ERROR: Message format corrupted (received %u)\n", recv_buffer[0]);
+        print_and_exit("ERROR: Message format corrupted (received %u)\n", recv_buffer[i]);
       }
 
       if (increment) {
