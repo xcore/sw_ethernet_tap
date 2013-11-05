@@ -32,7 +32,7 @@ on tile[1]: pcapng_mii_rx_t mii1 = {
   XS1_PORT_1K,
 };
 
-static inline void process_received(chanend c, int &work_pending,
+static inline void process_received(streaming chanend c, int &work_pending,
     buffers_used_t &used_buffers, buffers_free_t &free_buffers, uintptr_t buffer)
 {
   unsigned length_in_bytes;
@@ -48,7 +48,7 @@ static inline void process_received(chanend c, int &work_pending,
   }
 }
 
-void control(chanend c_mii1, chanend c_mii2, chanend c_control_to_outputter)
+void control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_control_to_outputter)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -56,7 +56,11 @@ void control(chanend c_mii1, chanend c_mii2, chanend c_control_to_outputter)
   buffers_free_t free_buffers;
   buffers_free_initialise(free_buffers);
 
-  //start by issuing buffers to both of the miis
+  // Start by issuing buffers to both of the miis
+  c_mii1 <: buffers_free_acquire(free_buffers);
+  c_mii2 <: buffers_free_acquire(free_buffers);
+
+  // Give a second buffer to ensure no delay between packets
   c_mii1 <: buffers_free_acquire(free_buffers);
   c_mii2 <: buffers_free_acquire(free_buffers);
 
@@ -116,8 +120,8 @@ void xscope_user_init(void) {
 
 int main()
 {
-  chan c_mii1;
-  chan c_mii2;
+  streaming chan c_mii1;
+  streaming chan c_mii2;
   chan c_control_to_outputter;
   interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {

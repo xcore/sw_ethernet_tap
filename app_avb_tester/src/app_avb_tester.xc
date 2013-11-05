@@ -125,8 +125,8 @@ int main()
     }
 
     on tile[RECEIVER_TILE] : {
-      chan c_mii1;
-      chan c_mii2;
+      streaming chan c_mii1;
+      streaming chan c_mii2;
       chan c_control_to_sender;
       interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
 

@@ -4,7 +4,7 @@
 #include "buffers.h"
 #include "xassert.h"
 
-static inline void process_received(chanend c, int &work_pending,
+static inline void process_received(streaming chanend c, int &work_pending,
     buffers_used_t &used_buffers, buffers_free_t &free_buffers, uintptr_t buffer)
 {
   unsigned length_in_bytes;
@@ -20,7 +20,7 @@ static inline void process_received(chanend c, int &work_pending,
   }
 }
 
-void receiver_control(chanend c_mii1, chanend c_mii2, chanend c_control_to_sender)
+void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_control_to_sender)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -28,7 +28,11 @@ void receiver_control(chanend c_mii1, chanend c_mii2, chanend c_control_to_sende
   buffers_free_t free_buffers;
   buffers_free_initialise(free_buffers);
 
-  //start by issuing buffers to both of the miis
+  // Start by issuing buffers to both of the miis
+  c_mii1 <: buffers_free_acquire(free_buffers);
+  c_mii2 <: buffers_free_acquire(free_buffers);
+
+  // Give a second buffer to ensure no delay between packets
   c_mii1 <: buffers_free_acquire(free_buffers);
   c_mii2 <: buffers_free_acquire(free_buffers);
 

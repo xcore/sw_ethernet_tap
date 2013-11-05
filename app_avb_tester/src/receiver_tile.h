@@ -9,7 +9,7 @@
  * \param   c_mii2                    Channel for communication with second MII.
  * \param   c_control_to_sender       Channel for communication with sender.
  */
-void receiver_control(chanend c_mii1, chanend c_mii2, chanend c_control_to_sender);
+void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_control_to_sender);
 
 /**
  * \brief   A core to send packet buffers to the analysis tile.
