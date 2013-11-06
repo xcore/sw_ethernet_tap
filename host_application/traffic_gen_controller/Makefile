@@ -1,4 +1,4 @@
-INCLUDES  = -I../../module_pcapng/src -I ../common
+INCLUDES  = -I../../module_pcapng/src -I../common
 INCLUDES += -I../../../sc_ethernet/tests/test_mii_dc/src
 
 all:
