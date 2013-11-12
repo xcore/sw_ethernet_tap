@@ -65,7 +65,7 @@ void pcapng_timer_server(server interface pcapng_timer_interface i_tmr[num_clien
 #define STW(offset,value) \
   asm volatile("stw %0, %1[%2]"::"r"(value), "r"(dptr), "r"(offset):"memory");
 
-void pcapng_receiver(chanend rx, pcapng_mii_rx_t &mii, client interface pcapng_timer_interface i_tmr)
+void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interface pcapng_timer_interface i_tmr)
 {
   timer t;
   unsigned time;

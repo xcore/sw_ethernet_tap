@@ -23,6 +23,6 @@ typedef struct {
   in port p_mii_rxdv;               /**< MII RX data valid wire */
 } pcapng_mii_rx_t;
 
-void pcapng_receiver(chanend rx, pcapng_mii_rx_t &mii, client interface pcapng_timer_interface i_tmr);
+void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interface pcapng_timer_interface i_tmr);
 
 #endif // __RECEIVER_H__

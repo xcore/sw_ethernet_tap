@@ -100,13 +100,13 @@ void *console_thread(void *arg)
       tester_command_t cmd = AVB_TESTER_EXPECT_NORMAL;
       if (get_next_char(&buffer[1]) == 'o')
         cmd = AVB_TESTER_EXPECT_OVERSUBSCRIBED;
-      xscope_ep_request_upload(sockfd, 4, (char *)&cmd);
+      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
 
     } else if (buffer[0] == 'x') {
       tester_command_t cmd = AVB_TESTER_XSCOPE_PACKETS_DISABLE;
       if (get_next_char(&buffer[1]) == 'e')
         cmd = AVB_TESTER_XSCOPE_PACKETS_ENABLE;
-      xscope_ep_request_upload(sockfd, 4, (char *)&cmd);
+      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
 
     } else if ((buffer[0] == 'h') || (buffer[0] == '?')) {
       print_console_usage();

@@ -44,25 +44,29 @@ void xscope_user_init()
  * \brief   A core that listens to data being sent from the host and
  *          informs the analysis engine of any changes
  */
-void xscope_listener(client interface analysis_config i_checker_config)
+void xscope_listener(chanend c_host_data, client interface analysis_config i_checker_config)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
 
+  xscope_connect_data_from_host(c_host_data);
   while (1) {
-    unsigned int num_read = xscope_upload_bytes(-1, (unsigned char *)&buffer[0]);
+    int bytes_read = 0;
+    select {
+      case xscope_data_from_host(c_host_data, (unsigned char *)buffer, bytes_read):
+        if (bytes_read == 4) {
+          // Expecting a word from the host which indicates the command
+          unsigned int cmd = buffer[0];
+          switch (cmd) {
+            default:
+              debug_printf("Unrecognised command '%d' received from host\n", cmd);
+              break;
+          }
 
-    if (num_read == 4) {
-      // Expecting a word from the host which indicates the command
-      unsigned int cmd = buffer[0];
-      switch (cmd) {
-        default:
-          debug_printf("Unrecognised command '%d' received from host\n", cmd);
-          break;
-      }
-
-    } else if (num_read != 0) {
-      debug_printf("ERROR: Received '%d' bytes\n", num_read);
+        } else if (bytes_read != 0) {
+          debug_printf("ERROR: Received '%d' bytes\n", bytes_read);
+        }
+        break;
     }
   }
 }
@@ -75,8 +79,11 @@ enum {
 
 int main()
 {
+  chan c_host_data;
   chan c_inter_tile;
   par {
+    xscope_host_data(c_host_data);
+
     on tile[ANALYSIS_TILE]: {
       chan c_receiver_to_control;
       chan c_control_to_analysis;
@@ -88,13 +95,13 @@ int main()
         analysis_control(c_receiver_to_control, c_control_to_analysis);
         analyser(c_control_to_analysis);
         periodic_checks(i_checker_config);
-        xscope_listener(i_checker_config);
+        xscope_listener(c_host_data, i_checker_config);
       }
     }
 
     on tile[RECEIVER_TILE] : {
-      chan c_mii1;
-      chan c_mii2;
+      streaming chan c_mii1;
+      streaming chan c_mii2;
       chan c_control_to_sender;
       interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
 
