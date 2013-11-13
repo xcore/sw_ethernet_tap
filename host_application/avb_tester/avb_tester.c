@@ -8,6 +8,16 @@
  *
  */
 #include "shared.h"
+#include "avb_tester.h"
+
+/*
+ * Includes for thread support
+ */
+#ifdef _WIN32
+  #include <winsock.h>
+#else
+  #include <pthread.h>
+#endif
 
 #define DEFAULT_FILE "cap.pcapng"
 
@@ -63,6 +73,57 @@ char get_next_char(char *buffer)
   return *ptr;
 }
 
+/*
+ * A separate thread to handle user commands to control the target.
+ */
+#ifdef _WIN32
+DWORD WINAPI console_thread(void *arg)
+#else
+void *console_thread(void *arg)
+#endif
+{
+  int sockfd = *(int *)arg;
+  char buffer[LINE_LENGTH + 1];
+  do {
+    int i = 0;
+    int c = 0;
+
+    printf("%s", g_prompt);
+    for (i = 0; (i < LINE_LENGTH) && ((c = getchar()) != EOF) && (c != '\n'); i++)
+      buffer[i] = tolower(c);
+    buffer[i] = '\0';
+
+    if (buffer[0] == 'q') {
+      print_and_exit("Done\n");
+
+    } else if (buffer[0] == 'e') {
+      tester_command_t cmd = AVB_TESTER_EXPECT_NORMAL;
+      if (get_next_char(&buffer[1]) == 'o')
+        cmd = AVB_TESTER_EXPECT_OVERSUBSCRIBED;
+      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+
+    } else if (buffer[0] == 'x') {
+      tester_command_t cmd = AVB_TESTER_XSCOPE_PACKETS_DISABLE;
+      if (get_next_char(&buffer[1]) == 'e')
+        cmd = AVB_TESTER_XSCOPE_PACKETS_ENABLE;
+      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+
+    } else if ((buffer[0] == 'h') || (buffer[0] == '?')) {
+      print_console_usage();
+
+    } else {
+      printf("Unrecognised command '%s'\n", buffer);
+      print_console_usage();
+    }
+  } while (1);
+
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
+}
+
 void usage(char *argv[])
 {
   printf("Usage: %s [-s server_ip] [-p port] [-l] [file]\n", argv[0]);
@@ -75,6 +136,12 @@ void usage(char *argv[])
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  HANDLE thread;
+#else
+  pthread_t tid;
+#endif
+
   char *server_ip = DEFAULT_SERVER_IP;
   char *port_str = DEFAULT_PORT;
   char *filename = DEFAULT_FILE;
@@ -126,6 +193,17 @@ int main(int argc, char *argv[])
     emit_pcapng_interface_description_block(g_pcap_fptr);
   }
   fflush(g_pcap_fptr);
+
+  // Now start the console
+#ifdef _WIN32
+  thread = CreateThread(NULL, 0, console_thread, &sockfd, 0, NULL);
+  if (thread == NULL)
+    print_and_exit("ERROR: Failed to create console thread\n");
+#else
+  err = pthread_create(&tid, NULL, &console_thread, &sockfd);
+  if (err != 0)
+    print_and_exit("ERROR: Failed to create console thread\n");
+#endif
 
   handle_socket(sockfd);
 
