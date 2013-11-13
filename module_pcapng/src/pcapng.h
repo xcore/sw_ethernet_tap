@@ -54,7 +54,8 @@ typedef struct enhanced_packet_block_t {
 } enhanced_packet_block_t;
 
 // The overhead of the Enhanced Packet Block structure (everything but the data pointer)
-#define PCAPNG_EPB_OVERHEAD_BYTES (sizeof(enhanced_packet_block_t) - sizeof(((enhanced_packet_block_t*)0)->data))
+// NOTE: the double cast is to work around compiler bug 14925
+#define PCAPNG_EPB_OVERHEAD_BYTES (sizeof(enhanced_packet_block_t) - sizeof(((enhanced_packet_block_t *)((enhanced_packet_block_t *)0))->data))
 
 #ifdef __XC__
 }

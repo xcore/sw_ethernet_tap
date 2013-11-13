@@ -108,7 +108,9 @@ void xscope_outputter(chanend c_control_to_outputter)
       c_control_to_outputter :> buffer;
       c_control_to_outputter :> length_in_bytes;
     }
-    xscope_bytes_c(0, length_in_bytes, buffer);
+    unsafe {
+      xscope_bytes_c(0, length_in_bytes, (unsigned char *)buffer);
+    }
 
     c_control_to_outputter <: buffer;
   }

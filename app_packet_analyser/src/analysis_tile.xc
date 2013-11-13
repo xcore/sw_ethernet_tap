@@ -97,7 +97,9 @@ void analyser(chanend c_control_to_analysis)
       c_control_to_analysis :> buffer;
       c_control_to_analysis :> length_in_bytes;
     }
-    analyse_buffer(buffer);
+    unsafe {
+      analyse_buffer((unsigned char *)buffer);
+    }
 
     // Tell the control the analysis is ready for the next buffer
     c_control_to_analysis <: buffer;
