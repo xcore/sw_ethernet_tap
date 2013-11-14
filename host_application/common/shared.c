@@ -1,6 +1,7 @@
 #include "shared.h"
 
 #define DEBUG 0
+#define MAX_NUM_CONNECT_RETRIES 20
 
 FILE *g_log = NULL;
 
@@ -9,7 +10,7 @@ FILE *g_log = NULL;
  */
 
 // Called whenever data is received from the target
-void hook_data_received(void *data, int data_len);
+void hook_data_received(int xscope_probe, void *data, int data_len);
 
 // Called whenever the application is existing
 void hook_exiting();
@@ -27,6 +28,7 @@ int initialise_common(char *ip_addr_str, char *port_str)
   struct sockaddr_in serv_addr;
   char *end_pointer = NULL;
   int port = 0;
+  int connect_retries = 0;
 
   if (DEBUG)
     g_log = fopen("run.log", "w");
@@ -49,25 +51,45 @@ int initialise_common(char *ip_addr_str, char *port_str)
   }
 #endif // _WIN32
 
-  if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    print_and_exit("ERROR: Could not create socket\n");
+  // Need the fflush because there is no newline in the print
+  printf("Connecting"); fflush(stdout);
+  while (1) {
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+      print_and_exit("ERROR: Could not create socket\n");
 
-  memset(&serv_addr, 0, sizeof(serv_addr));
+    memset(&serv_addr, 0, sizeof(serv_addr));
 
-  // Parse the port parameter
-  end_pointer = (char*)port_str;
-  port = strtol(port_str, &end_pointer, 10);
-  if (end_pointer == port_str)
-    print_and_exit("ERROR: Failed to parse port\n");
+    // Parse the port parameter
+    end_pointer = (char*)port_str;
+    port = strtol(port_str, &end_pointer, 10);
+    if (end_pointer == port_str)
+      print_and_exit("ERROR: Failed to parse port\n");
 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(port);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
 
-  if (inet_pton(AF_INET, ip_addr_str, &serv_addr.sin_addr) <= 0)
-    print_and_exit("ERROR: inet_pton error occured\n");
+    if (inet_pton(AF_INET, ip_addr_str, &serv_addr.sin_addr) <= 0)
+      print_and_exit("ERROR: inet_pton error occured\n");
 
-  if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    print_and_exit("ERROR: Connect failed\n");
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+      close(sockfd);
+
+      if (connect_retries < MAX_NUM_CONNECT_RETRIES) {
+        // Need the fflush because there is no newline in the print
+        printf("."); fflush(stdout);
+#ifdef _WIN32
+        Sleep(1000);
+#else
+        sleep(1);
+#endif
+        connect_retries++;
+      } else {
+        print_and_exit("\nERROR: Connect failed\n");
+      }
+    } else {
+      break;
+    }
+  }
 
   // Send the command to request which event types to receive
   command_buffer[0] = XSCOPE_SOCKET_MSG_EVENT_DATA | XSCOPE_SOCKET_MSG_EVENT_PRINT;
@@ -76,7 +98,7 @@ int initialise_common(char *ip_addr_str, char *port_str)
   if (n != 1)
     print_and_exit("ERROR: Command send failed\n");
 
-  printf("Connected\n");
+  printf(" - connected\n");
 
   return sockfd;
 }
