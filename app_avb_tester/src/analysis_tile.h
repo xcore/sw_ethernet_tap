@@ -6,6 +6,7 @@
  */
 interface analysis_config {
   void set_expect_oversubscribed(int oversubscribed);
+  void set_debug(int debug);
 };
 
 /**

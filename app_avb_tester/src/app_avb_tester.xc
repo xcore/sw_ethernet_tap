@@ -69,6 +69,14 @@ void xscope_listener(chanend c_host_data,
               i_checker_config.set_expect_oversubscribed(1);
               break;
 
+            case AVB_TESTER_PRINT_DEBUG_ENABLE:
+              i_checker_config.set_debug(1);
+              break;
+
+            case AVB_TESTER_PRINT_DEBUG_DISABLE:
+              i_checker_config.set_debug(0);
+              break;
+
             case AVB_TESTER_XSCOPE_PACKETS_ENABLE:
               i_outputter_config.set_output_packets(1);
               break;

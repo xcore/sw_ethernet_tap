@@ -146,6 +146,7 @@ void xscope_outputter(server interface outputter_config i_config,
 void periodic_checks(server interface analysis_config i_config)
 {
   unsigned int expect_oversubscribed = 0;
+  int print_debug = 0;
   timer tmr;
   int time;
 
@@ -156,13 +157,18 @@ void periodic_checks(server interface analysis_config i_config)
     select {
       case tmr when timerafter(time) :> void : {
         time += TIMER_TICKS_PER_SECOND;
-        check_counts(expect_oversubscribed);
+        check_counts(expect_oversubscribed, print_debug);
         break;
       }
       case i_config.set_expect_oversubscribed(int oversubscribed) : {
         expect_oversubscribed = oversubscribed;
         debug_printf("Expecting %s\n",
             expect_oversubscribed ? "oversubscribed" : "normal");
+        break;
+      }
+      case i_config.set_debug(int debug) : {
+        debug_printf("%s debug printing\n", debug ? "Enabling" : "Disabling");
+        print_debug = debug;
         break;
       }
     }

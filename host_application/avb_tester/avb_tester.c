@@ -60,6 +60,7 @@ void print_console_usage()
   printf("  h|?     : print this help message\n");
   printf("  e <o|n> : tell app to expect (o)versubscribed or (n)ormal traffic\n");
   printf("  x <e|d> : tell app to (e)nable or (d)isable xscope packet dumping\n");
+  printf("  d <e|d> : tell app to (e)nable or (d)isable debug output\n");
   printf("  q       : quit\n");
 }
 
@@ -93,27 +94,43 @@ void *console_thread(void *arg)
       buffer[i] = tolower(c);
     buffer[i] = '\0';
 
-    if (buffer[0] == 'q') {
-      print_and_exit("Done\n");
+    switch (buffer[0]) {
+      case 'q':
+        print_and_exit("Done\n");
+        break;
 
-    } else if (buffer[0] == 'e') {
-      tester_command_t cmd = AVB_TESTER_EXPECT_NORMAL;
-      if (get_next_char(&buffer[1]) == 'o')
-        cmd = AVB_TESTER_EXPECT_OVERSUBSCRIBED;
-      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+      case 'e': {
+        tester_command_t cmd = AVB_TESTER_EXPECT_NORMAL;
+        if (get_next_char(&buffer[1]) == 'o')
+          cmd = AVB_TESTER_EXPECT_OVERSUBSCRIBED;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
 
-    } else if (buffer[0] == 'x') {
-      tester_command_t cmd = AVB_TESTER_XSCOPE_PACKETS_DISABLE;
-      if (get_next_char(&buffer[1]) == 'e')
-        cmd = AVB_TESTER_XSCOPE_PACKETS_ENABLE;
-      xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+      case 'x': {
+        tester_command_t cmd = AVB_TESTER_XSCOPE_PACKETS_DISABLE;
+        if (get_next_char(&buffer[1]) == 'e')
+          cmd = AVB_TESTER_XSCOPE_PACKETS_ENABLE;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
 
-    } else if ((buffer[0] == 'h') || (buffer[0] == '?')) {
-      print_console_usage();
+      case 'd': {
+        tester_command_t cmd = AVB_TESTER_PRINT_DEBUG_DISABLE;
+        if (get_next_char(&buffer[1]) == 'e')
+          cmd = AVB_TESTER_PRINT_DEBUG_ENABLE;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
 
-    } else {
-      printf("Unrecognised command '%s'\n", buffer);
-      print_console_usage();
+      case 'h':
+      case '?':
+        print_console_usage();
+        break;
+
+      default:
+        printf("Unrecognised command '%s'\n", buffer);
+        print_console_usage();
     }
   } while (1);
 

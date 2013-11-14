@@ -52,7 +52,7 @@ typedef struct {
 /**
  * \brief   Should be called once a second to validate the counts per stream.
  */
-void check_counts(int oversubscribed);
+void check_counts(int oversubscribed, int debug);
 
 #ifdef __XC__
 }

@@ -58,7 +58,7 @@ void analyse_buffer(const unsigned char *buffer, const unsigned int length_in_by
   }
 }
 
-void check_counts(int oversubscribed)
+void check_counts(int oversubscribed, int debug)
 {
   // First pass to snapshot the current counts
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
@@ -73,6 +73,7 @@ void check_counts(int oversubscribed)
     hwlock_release(lock);
   }
 
+  int num_active = 0;
   // Second pass to do the checking and printing
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
     if (stream_state[i].id.low || stream_state[i].id.high) {
@@ -85,6 +86,7 @@ void check_counts(int oversubscribed)
 
       } else {
         unsigned int expected_rate = CLASS_A_PACKETS_PER_SEC;
+        num_active++;
 
         if (oversubscribed) {
           // When the stream is oversubscribed then there will be an extra byte
@@ -102,13 +104,20 @@ void check_counts(int oversubscribed)
         // spurious errors when the stream is stopping.
         if (stream_state[i].active &&
             (stream_state[i].last_count < (expected_rate - ERROR_MARGIN) ||
-             stream_state[i].last_count > (expected_rate + ERROR_MARGIN))) {
+             stream_state[i].last_count > (expected_rate + ERROR_MARGIN)))
+        {
           debug_printf("ERROR: 0x%x%x %d\n", stream_state[i].id.high, stream_state[i].id.low, 
+              stream_state[i].last_count);
+        } else if (debug) {
+          debug_printf("0x%x%x %d\n", stream_state[i].id.high, stream_state[i].id.low,
               stream_state[i].last_count);
         }
       }
     }
   }
+
+  if (debug && num_active == 0)
+    debug_printf("No active streams found\n");
 }
 
 static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes)
