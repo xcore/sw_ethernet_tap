@@ -223,6 +223,7 @@ void handle_socket(int sockfd)
       } else if (recv_buffer[i] == XSCOPE_SOCKET_MSG_EVENT_DATA) {
         // Data has been received, put it into the pcap file
         if ((i + DATA_EVENT_HEADER_BYTES) <= n) {
+          int xscope_probe = recv_buffer[i+1];
           int packet_len = EXTRACT_UINT(recv_buffer, i + 4);
 
           // Fixed-length data packets are encoded with a length of 0
@@ -237,7 +238,7 @@ void handle_socket(int sockfd)
             // An entire packet has been received - write it to the file
             total_bytes += packet_len;
 
-            hook_data_received(&recv_buffer[data_start], packet_len);
+            hook_data_received(xscope_probe, &recv_buffer[data_start], packet_len);
             increment = packet_len + DATA_EVENT_BYTES;
           }
         }

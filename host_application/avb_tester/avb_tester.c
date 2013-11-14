@@ -27,7 +27,7 @@ const char *g_prompt = " > ";
 // Indicate whether the output should be pcap or pcapng
 int g_libpcap_mode = 0;
 
-void hook_data_received(void *data, int data_len)
+void hook_data_received(int xscope_probe, void *data, int data_len)
 {
   if (g_libpcap_mode) {
     // Convert the pacpng data from the target to libpcap format

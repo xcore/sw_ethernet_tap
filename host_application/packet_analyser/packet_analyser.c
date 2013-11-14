@@ -13,7 +13,7 @@
 // Need to define this as NULL to indicate that there is no console being used
 const char *g_prompt = NULL;
 
-void hook_data_received(void *data, int data_len)
+void hook_data_received(int xscope_probe, void *data, int data_len)
 {
   interface_state_t *state = (interface_state_t *)data;
   double mega_bits_per_second = (state->byte_snapshot * 8.0) / 1000000.0;
