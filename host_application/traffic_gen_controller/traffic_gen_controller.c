@@ -25,7 +25,7 @@
 
 const char *g_prompt = " > ";
 
-void hook_data_received(void *data, int data_len)
+void hook_data_received(int xscope_probe, void *data, int data_len)
 {
   // Ignore
 }
