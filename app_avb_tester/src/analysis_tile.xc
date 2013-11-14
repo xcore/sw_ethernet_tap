@@ -103,7 +103,9 @@ void analyser(chanend c_control_to_analysis, chanend c_analysis_to_outputter)
       c_control_to_analysis :> buffer;
       c_control_to_analysis :> length_in_bytes;
     }
-    analyse_buffer(buffer, length_in_bytes);
+    unsafe {
+      analyse_buffer((unsigned char *)buffer, length_in_bytes);
+    }
 
     // Pass the buffer on to the outputter
     c_analysis_to_outputter <: buffer;
@@ -125,8 +127,10 @@ void xscope_outputter(server interface outputter_config i_config,
       case c_analysis_to_outputter :> buffer : {
         unsigned length_in_bytes;
         c_analysis_to_outputter :> length_in_bytes;
-        if (send_packets_over_xscope)
-          xscope_bytes_c(0, length_in_bytes, buffer);
+        unsafe {
+          if (send_packets_over_xscope)
+            xscope_bytes_c(0, length_in_bytes, (unsigned char *)buffer);
+        }
         c_outputter_to_control <: buffer;
         break;
       }
