@@ -35,35 +35,30 @@ void hook_exiting()
   // Ignore
 }
 
-void print_traffic_gen_cmd_usage()
+static void print_pkt_ctrl_usage()
 {
-  printf("  c <pkt_typ> <wt> <sz_min> <sz_max> : tell traffic generator to apply specified\n");
-  printf("                                       weight(wt) and packet sizes (sz_min and sz_max)\n");
-  printf("                                       for a (u)nicast, (m)ulticast or a (b)roadcast\n");
-  printf("                                       packet type (pkt_typ)\n");
+  printf("  %c <type> <wt> <min> <max> : tell traffic generator to apply specified\n", CMD_PKT_CONTROL);
+  printf("               weight(wt) and packet sizes (min and max)\n");
+  printf("               for a (u)nicast, (m)ulticast or a (b)roadcast packet type (type)\n");
 }
 
-void print_traffic_gen_controller_cmd_usage()
+static void print_set_mac_usage()
 {
-  printf("  g <pkt_typ> <wt> <ln_rt>   : tell traffic generator to control packet generation\n");
-  printf("                               for a (u)nicast, (m)ulticast or a (b)roadcast packet\n");
-  printf("                               type (pkt_typ) by applying specified weight (wt) and\n");
-  printf("                               line rate (ln_rt)\n");
+  printf("  %c <u|m> a:b:c:d:e:f       : set the destination MAC address for (u)nicast/(m)ulticast traffic\n", CMD_SET_MAC_ADDRESS);
 }
 
-void print_console_usage()
+static void print_console_usage()
 {
   printf("Supported commands:\n");
+  print_pkt_ctrl_usage();
+  print_set_mac_usage();
+  printf("  %c <ln_rt> : set the line rate for traffic generation\n", CMD_LINE_RATE);
+  printf("  %c <s|r|d> : set the generation mode to one of (s)ilent, (r)andom mode or (d)irected\n", CMD_SET_GENERATOR_MODE);
+  printf("  %c         : apply the next configuration state and then copy current configuration to next\n", CMD_APPLY_CFG);
+  printf("  %c         : swap current configuration with next configuration\n", CMD_SWAP_CFG);
+  printf("  %c         : tell traffic generator to display 'directed' packet generation configuration details.\n", CMD_PRINT_PKT_CONFIGURATION);
   printf("  h|?       : print this help message\n");
-  printf("  r <ln_rt> : tell traffic generator to use the specified line rate for traffic generation\n");
-  printf("  m <s|r|d> : tell traffic generator to use any of the (s)ilent, (r)andom mode\n");
-  printf("              or (d)irected mode for traffic generation\n");
-  print_traffic_gen_cmd_usage();
-  print_traffic_gen_controller_cmd_usage();
-  printf("  e         : tell traffic generator about the end of configuration for the current\n");
-  printf("              packet generation. This will make the current configuration active.\n");
-  printf("  p         : tell traffic generator to display 'directed' packet generation configuration details.\n");
-  printf("  q         : quit\n");
+  printf("  %c         : quit\n", CMD_QUIT);
 }
 
 #define LINE_LENGTH 1024
@@ -110,14 +105,14 @@ static int validate_pkt_ctrl_setting(const unsigned char *buffer)
 
   if ((pkt_type != 'u') && (pkt_type != 'm') && (pkt_type != 'b')) {
     printf("Invalid packet type; specify either a (u)nicast, (m)ulticast or a (b)roadcast packet type \n");
-    print_traffic_gen_cmd_usage();
+    print_pkt_ctrl_usage();
     return 0;
   }
 
   weight = convert_atoi_substr(&ptr);
   if ((weight < 0) || (weight > 100)) {
     printf("Invalid weight; specify a value between 1 and 99 \n");
-    print_traffic_gen_cmd_usage();
+    print_pkt_ctrl_usage();
     return 0;
   }
 
@@ -127,20 +122,20 @@ static int validate_pkt_ctrl_setting(const unsigned char *buffer)
   pkt_size_min = convert_atoi_substr(&ptr);
   if ((pkt_size_min <= 0) || (pkt_size_min > 1500)) {
     printf("Invalid min pkt_size; specify a value between 1 and 1500 \n");
-    print_traffic_gen_cmd_usage();
+    print_pkt_ctrl_usage();
     return 0;
   }
 
   pkt_size_max = convert_atoi_substr(&ptr);
   if ((pkt_size_max < 1) || (pkt_size_max > 1500)) {
     printf("Invalid max pkt_size; specify a value between 1 and 1500 \n");
-    print_traffic_gen_cmd_usage();
+    print_pkt_ctrl_usage();
     return 0;
   }
 
   if (pkt_size_min > pkt_size_max) {
     printf("pkt_size_max value should be greater or equal to pkt_size_min \n");
-    print_traffic_gen_cmd_usage();
+    print_pkt_ctrl_usage();
     return 0;
   }
 
@@ -158,6 +153,45 @@ static int validate_mode(const unsigned char *buffer)
   }
 
   return 1;
+}
+
+static int validate_set_mac_address(const unsigned char *buffer)
+{
+  const unsigned char *ptr = &buffer[1]; // Skip command
+  char type = get_next_char(&ptr);
+  int count = 0;
+  int error = 0;
+
+  if ((type != 'u') && (type != 'm')) {
+    printf("Invalid type; specify (u)nicast or (m)ulticast\n");
+    return 0;
+  }
+
+  while(1) {
+    int byte_len = 0;
+    while (isspace(*ptr)) ptr++;
+    while (isalnum(*ptr)) {
+      byte_len++;
+      ptr++;
+    }
+    if (byte_len > 2)
+      error = 1;
+
+    if (*ptr == ':') {
+      ptr++;
+      count++;
+    }
+
+    if (!*ptr || error)
+      break;
+  }
+
+  if (count == 5 && !error) {
+    return 1;
+  } else {
+    printf("Unable to parse the MAC address. Should be of the form aa:bb:cc:dd:ee:ff\n");
+    return 0;
+  }
 }
 
 static int validate_line_rate(unsigned char *buffer)
@@ -199,31 +233,34 @@ void *console_thread(void *arg)
     buffer[i] = '\0';
 
     switch (buffer[0]) {
-      case SET_GENERATOR_MODE:
+      case CMD_SET_GENERATOR_MODE:
         if (validate_mode(buffer))
           xscope_ep_request_upload(sockfd, 3, buffer);
         break;
 
-      case PKT_CONTROL:
+      case CMD_PKT_CONTROL:
         if (validate_pkt_ctrl_setting(buffer))
           xscope_ep_request_upload(sockfd, i, buffer);
         break;
 
-      case LINE_RATE:
-        {
-          i = validate_line_rate(buffer);
-          if (i)
-            xscope_ep_request_upload(sockfd, i, buffer);
-        }
+      case CMD_LINE_RATE:
+        i = validate_line_rate(buffer);
+        if (i)
+          xscope_ep_request_upload(sockfd, i, buffer);
         break;
 
-      case PRINT_PKT_CONFIGURATION:
-      case SWAP_CFG:
-      case END_OF_CFG:
+      case CMD_SET_MAC_ADDRESS:
+          if (validate_set_mac_address(buffer))
+            xscope_ep_request_upload(sockfd, i, buffer);
+        break;
+
+      case CMD_PRINT_PKT_CONFIGURATION:
+      case CMD_SWAP_CFG:
+      case CMD_APPLY_CFG:
         xscope_ep_request_upload(sockfd, 1, buffer);
         break;
 
-      case 'q':
+      case CMD_QUIT:
         print_and_exit("Done\n");
         break;
 
