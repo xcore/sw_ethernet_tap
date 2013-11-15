@@ -93,10 +93,9 @@ int initialise_common(char *ip_addr_str, char *port_str)
 
   // Send the command to request which event types to receive
   command_buffer[0] = XSCOPE_SOCKET_MSG_EVENT_DATA | XSCOPE_SOCKET_MSG_EVENT_PRINT;
-  //command_buffer[0] = XSCOPE_SOCKET_MSG_EVENT_DATA;
   n = send(sockfd, command_buffer, 1, 0);
   if (n != 1)
-    print_and_exit("ERROR: Command send failed\n");
+    print_and_exit("\nERROR: Command send failed\n");
 
   printf(" - connected\n");
 
@@ -230,10 +229,12 @@ void handle_socket(int sockfd)
               if (g_prompt != NULL)
                 printf("%s", g_prompt);
 
-              // Because there is no newline character we need to explictly flush
-              fflush(stdout);
               new_line = 1;
             }
+
+            // Because there is no newline character at the end of the prompt and there
+            // may be none at the end of the string then we need to flush explicitly
+            fflush(stdout);
 
             // Restore the end character
             recv_buffer[string_end] = tmp;
