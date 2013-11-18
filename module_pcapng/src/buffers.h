@@ -7,7 +7,7 @@
 #include "pcapng_conf.h"
 
 /* Enough room to cope with a double VLAN-tagged packet */
-#define MAX_BUFFER_SIZE (1524+PCAPNG_EPB_OVERHEAD_BYTES)
+#define MAX_BUFFER_SIZE (CAPTURE_BYTES + PCAPNG_EPB_OVERHEAD_BYTES)
 
 typedef struct buffers_free_t {
   unsigned top_index;

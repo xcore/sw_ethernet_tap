@@ -16,6 +16,6 @@
 /*
  * Define the number of buffers available
  */
-#define BUFFER_COUNT 32
+#define BUFFER_COUNT 100
 
 #endif // __PCAPNG_CONF_H__
