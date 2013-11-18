@@ -38,7 +38,7 @@ void hook_exiting()
 static void print_pkt_ctrl_usage()
 {
   printf("  %c <type> <wt> <min> <max> : tell traffic generator to apply specified\n", CMD_PKT_CONTROL);
-  printf("               weight(wt) and packet sizes (min and max)\n");
+  printf("               weight (wt) and packet sizes (min/max in the range 60->1518)\n");
   printf("               for a (u)nicast, (m)ulticast or a (b)roadcast packet type (type)\n");
 }
 
@@ -120,14 +120,14 @@ static int validate_pkt_ctrl_setting(const unsigned char *buffer)
     return 1;
 
   pkt_size_min = convert_atoi_substr(&ptr);
-  if ((pkt_size_min <= 0) || (pkt_size_min > 1500)) {
+  if ((pkt_size_min < 60) || (pkt_size_min > 1518)) {
     printf("Invalid min pkt_size; specify a value between 1 and 1500 \n");
     print_pkt_ctrl_usage();
     return 0;
   }
 
   pkt_size_max = convert_atoi_substr(&ptr);
-  if ((pkt_size_max < 1) || (pkt_size_max > 1500)) {
+  if ((pkt_size_max < 60) || (pkt_size_max > 1518)) {
     printf("Invalid max pkt_size; specify a value between 1 and 1500 \n");
     print_pkt_ctrl_usage();
     return 0;
