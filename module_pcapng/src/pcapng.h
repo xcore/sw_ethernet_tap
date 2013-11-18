@@ -48,8 +48,10 @@ typedef struct enhanced_packet_block_t {
     uint32_t timestamp_low;
     uint32_t captured_len;
     uint32_t packet_len;
-    uint32_t data; // Data starts here
-                   // Followed by options and block_total_len_post;
+    uintptr_t data; // Actually pointer to data - but needs to be uint32_t because host implementations 
+    // These items are not actually at this location in memory, but for buffer size calculations they need to be here
+//     uintptr_t options; // No options
+    uint32_t block_total_len_post;
 } enhanced_packet_block_t;
 
 // The overhead of the Enhanced Packet Block structure (everything but the data pointer)
