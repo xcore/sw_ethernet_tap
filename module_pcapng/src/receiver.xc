@@ -71,24 +71,44 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interfac
   unsigned time;
   unsigned word;
   uintptr_t dptr;
-  unsigned eof = 0;
 
   init_mii_rx(mii);
 
+  set_core_fast_mode_on();
+
   while (1) {
     unsigned words_rxd = 0;
+    unsigned eof = 0;
+
+    // Receive buffer pointer
     rx :> dptr;
+
     STW(0, PCAPNG_BLOCK_ENHANCED_PACKET); // Block Type
     STW(2, mii.id); // Interface ID
 
-    eof = 0;
+    // Test the data valid to determine whether in the middle of a packet
+    int dv = 0;
+    mii.p_mii_rxdv :> dv;
+    if (dv) {
+
+      // If in the middle of the packet then wait for it to end
+      while (dv)
+        mii.p_mii_rxdv :> dv;
+
+      // And then clear any remaining bytes from the data port
+      clearbuf(mii.p_mii_rxd);
+    }
+
+    // Wait for the start of frame nibble
     mii.p_mii_rxd when pinseq(0xD) :> int sof;
 
+    // Take start of frame timestamp
     t :> time;
 
     while (!eof) {
       select {
         case mii.p_mii_rxd :> word: {
+          // Store the captured words up to the maximum capture length
           if (words_rxd < CAPTURE_WORDS)
             STW(words_rxd + 7, word);
           words_rxd += 1;
@@ -98,8 +118,6 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interfac
         {
           int tail;
           int taillen = endin(mii.p_mii_rxd);
-
-          //TODO taillen > 32 ??
 
           eof = 1;
           mii.p_mii_rxd :> tail;
@@ -125,8 +143,7 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interfac
           STW(1, total_length);              // Block Total Length
           STW(5, byte_count);                // Captured Len
           STW(6, packet_len);                // Packet Len
-          STW(words_rxd + 7, 0);             // Options
-          STW(words_rxd + 8, total_length);  // Block Total Length
+          STW(words_rxd + 7, total_length);  // Block Total Length
 
           // Do this once packet reception is finished
           STW(4, time); // TimeStamp Low

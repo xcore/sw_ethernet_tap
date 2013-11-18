@@ -9,6 +9,7 @@
 #include "buffers.h"
 #include "pcapng.h"
 #include "pcapng_conf.h"
+#include "debug_print.h"
 
 #define SEND_PACKET_DATA 1
 
@@ -33,22 +34,25 @@ on tile[1]: pcapng_mii_rx_t mii1 = {
 };
 
 static inline void process_received(streaming chanend c, int &work_pending,
-    buffers_used_t &used_buffers, buffers_free_t &free_buffers, uintptr_t buffer)
+    buffers_used_t &used_buffers, buffers_free_t &free_buffers, uintptr_t buffer,
+    int &waiting_for_buffer, streaming chanend debug)
 {
   unsigned length_in_bytes;
   c :> length_in_bytes;
 
+  buffers_used_add(used_buffers, buffer, length_in_bytes);
+  work_pending++;
+
   if (buffers_used_full(used_buffers) || free_buffers.top_index == 0) {
-    // No more buffers
-    assert(0);
+    debug <: 0;
+    waiting_for_buffer++;
   } else {
-    buffers_used_add(used_buffers, buffer, length_in_bytes);
-    work_pending++;
     c <: buffers_free_acquire(free_buffers);
   }
 }
 
-void control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_control_to_outputter)
+static void control(streaming chanend c_mii1, streaming chanend c_mii2,
+    chanend c_control_to_outputter, streaming chanend debug)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -66,19 +70,30 @@ void control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_contr
 
   int sender_active = 0;
   int work_pending = 0;
+  int waiting_for_buffer1 = 0;
+  int waiting_for_buffer2 = 0;
   while (1) {
     select {
       case c_mii1 :> uintptr_t buffer : {
-        process_received(c_mii1, work_pending, used_buffers, free_buffers, buffer);
+        process_received(c_mii1, work_pending, used_buffers, free_buffers, buffer, waiting_for_buffer1, debug);
         break;
       }
       case c_mii2 :> uintptr_t buffer : {
-        process_received(c_mii2, work_pending, used_buffers, free_buffers, buffer);
+        process_received(c_mii2, work_pending, used_buffers, free_buffers, buffer, waiting_for_buffer2, debug);
         break;
       }
       case sender_active => c_control_to_outputter :> uintptr_t sent_buffer : {
-        buffers_free_release(free_buffers, sent_buffer);
         sender_active = 0;
+
+        if (waiting_for_buffer1) {
+          c_mii1 <: sent_buffer;
+          waiting_for_buffer1--;
+        } else if (waiting_for_buffer2) {
+          c_mii2 <: sent_buffer;
+          waiting_for_buffer2--;
+        } else {
+          buffers_free_release(free_buffers, sent_buffer);
+        }
         break;
       }
       work_pending && !sender_active => default : {
@@ -118,20 +133,45 @@ void xscope_outputter(chanend c_control_to_outputter)
 
 void xscope_user_init(void) {
   xscope_register(1, XSCOPE_CONTINUOUS, "Packet Data", XSCOPE_UINT, "Value");
+  xscope_config_io(XSCOPE_IO_BASIC);
+}
+
+void debugger(streaming chanend c)
+{
+  int lost_count = 0;
+  int printed_count = 0;
+
+  while (1) {
+    select {
+      case c :> int x:
+        lost_count++;
+        break;
+
+      default:
+        if (printed_count != lost_count) {
+          debug_printf("\r%d.", lost_count);
+          printed_count = lost_count;
+        }
+        break;
+    }
+  }
 }
 
 int main()
 {
+  streaming chan debug;
   streaming chan c_mii1;
   streaming chan c_mii2;
   chan c_control_to_outputter;
   interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
   par {
     on tile[1]:xscope_outputter(c_control_to_outputter);
-    on tile[1]:control(c_mii1, c_mii2, c_control_to_outputter);
+    on tile[1]:control(c_mii1, c_mii2, c_control_to_outputter, debug);
     on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
     on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
     on tile[1]:pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
+
+    on tile[0]:debugger(debug);
   }
   return 0;
 }
