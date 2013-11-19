@@ -445,6 +445,6 @@
 		</cconfiguration>
 	</storageModule>
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-		<project id="app_pcapng.null.474449017" name="app_pcapng"/>
+		<project id="app_avb_tester.null.474449017" name="app_avb_tester"/>
 	</storageModule>
 </cproject>
