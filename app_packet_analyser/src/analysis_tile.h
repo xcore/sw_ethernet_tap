@@ -14,7 +14,8 @@ interface analysis_config {
  * \param   c_receiver_to_control     Channel for communication with receiver.
  * \param   c_control_to_analysis     Channel for communication with analyser.
  */
-void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analysis);
+void analysis_control(streaming chanend c_receiver_to_control,
+                      streaming chanend c_control_to_analysis);
 
 /**
  * \brief   A core that receives buffers from the other tile.
@@ -22,14 +23,14 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
  * \param   c_inter_tile              Channel for inter-tile communication.
  * \param   c_receiver_to_control     Channel for communication with controller.
  */
-void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control);
+void buffer_receiver(chanend c_inter_tile, streaming chanend c_receiver_to_control);
 
 /**
  * \brief   A core that performs analysis of each packet buffer received.
  *
  * \param   c_control_to_analysis     Channel for communication with controller.
  */
-void analyser(chanend c_control_to_analysis);
+void analyser(streaming chanend c_control_to_analysis);
 
 /**
  * \brief   A core that performs the checks on the stream packet rate once a 

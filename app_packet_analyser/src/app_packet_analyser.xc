@@ -85,8 +85,8 @@ int main()
     xscope_host_data(c_host_data);
 
     on tile[ANALYSIS_TILE]: {
-      chan c_receiver_to_control;
-      chan c_control_to_analysis;
+      streaming chan c_receiver_to_control;
+      streaming chan c_control_to_analysis;
       interface analysis_config i_checker_config;
 
       analyse_init();
@@ -102,7 +102,7 @@ int main()
     on tile[RECEIVER_TILE] : {
       streaming chan c_mii1;
       streaming chan c_mii2;
-      chan c_control_to_sender;
+      streaming chan c_control_to_sender;
       interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
 
       par {

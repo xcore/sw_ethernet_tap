@@ -9,7 +9,7 @@
 
 #define TIMER_TICKS_PER_SECOND 100000000
 
-void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analysis)
+void analysis_control(streaming chanend c_receiver_to_control, streaming chanend c_control_to_analysis)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -17,7 +17,7 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
   buffers_free_t free_buffers;
   buffers_free_initialise(free_buffers);
 
-  //start by issuing buffers to both of the miis
+  //start by issuing buffers to the receiver
   c_receiver_to_control <: buffers_free_acquire(free_buffers);
 
   int analysis_active = 0;
@@ -49,10 +49,8 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
         uintptr_t buffer;
         unsigned length_in_bytes;
         {buffer, length_in_bytes} = buffers_used_take(used_buffers);
-        master {
-          c_control_to_analysis <: buffer;
-          c_control_to_analysis <: length_in_bytes;
-        }
+        c_control_to_analysis <: buffer;
+        c_control_to_analysis <: length_in_bytes;
         work_pending--;
         analysis_active = 1;
         break;
@@ -61,7 +59,7 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
   }
 }
 
-void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control)
+void buffer_receiver(chanend c_inter_tile, streaming chanend c_receiver_to_control)
 {
   uintptr_t buffer;
 
@@ -88,15 +86,13 @@ void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control)
   }
 }
 
-void analyser(chanend c_control_to_analysis)
+void analyser(streaming chanend c_control_to_analysis)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
-    slave {
-      c_control_to_analysis :> buffer;
-      c_control_to_analysis :> length_in_bytes;
-    }
+    c_control_to_analysis :> buffer;
+    c_control_to_analysis :> length_in_bytes;
     unsafe {
       analyse_buffer((unsigned char *)buffer);
     }

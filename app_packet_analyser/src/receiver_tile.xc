@@ -20,7 +20,8 @@ static inline void process_received(streaming chanend c, int &work_pending,
   }
 }
 
-void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2, chanend c_control_to_sender)
+void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2,
+    streaming chanend c_control_to_sender)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -58,10 +59,8 @@ void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2, chanen
         uintptr_t buffer;
         unsigned length_in_bytes;
         {buffer, length_in_bytes} = buffers_used_take(used_buffers);
-        master {
-          c_control_to_sender <: buffer;
-          c_control_to_sender <: length_in_bytes;
-        }
+        c_control_to_sender <: buffer;
+        c_control_to_sender <: length_in_bytes;
         work_pending--;
         sender_active = 1;
         break;
@@ -70,16 +69,14 @@ void receiver_control(streaming chanend c_mii1, streaming chanend c_mii2, chanen
   }
 }
 
-void buffer_sender(chanend c_control_to_sender, chanend c_inter_tile)
+void buffer_sender(streaming chanend c_control_to_sender, chanend c_inter_tile)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
 
-    slave {
-      c_control_to_sender :> buffer;
-      c_control_to_sender :> length_in_bytes;
-    }
+    c_control_to_sender :> buffer;
+    c_control_to_sender :> length_in_bytes;
 
     unsigned int length_in_words = (length_in_bytes + 3) / 4;
     c_inter_tile <: length_in_bytes;
