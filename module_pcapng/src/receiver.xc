@@ -34,7 +34,7 @@ static void init_mii_rx(pcapng_mii_rx_t &m)
 
 #define PERIOD_BITS 30
 
-void pcapng_timer_server(server interface pcapng_timer_interface i_tmr[num_clients], unsigned num_clients)
+void pcapng_timer_server(streaming chanend c_clients[num_clients], unsigned num_clients)
 {
   unsigned t0;
   unsigned next_time;
@@ -45,11 +45,14 @@ void pcapng_timer_server(server interface pcapng_timer_interface i_tmr[num_clien
 
   while (1) {
     select {
-      case i_tmr[int i].get_top_bits(unsigned int time) -> unsigned int retval: {
+      case c_clients[int i] :> unsigned int time: {
+        unsigned int retval = 0;
         if (time - t0 > (1 << PERIOD_BITS))
           retval = (topbits-1) >> (32 - PERIOD_BITS);
         else
           retval = topbits >> (32 - PERIOD_BITS);
+
+        c_clients[i] <: retval;
         break;
       }
       case t when timerafter(next_time) :> void : {
@@ -65,7 +68,7 @@ void pcapng_timer_server(server interface pcapng_timer_interface i_tmr[num_clien
 #define STW(offset,value) \
   asm volatile("stw %0, %1[%2]"::"r"(value), "r"(dptr), "r"(offset):"memory");
 
-void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interface pcapng_timer_interface i_tmr)
+void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, streaming chanend c_time_server)
 {
   timer t;
   unsigned time;
@@ -104,6 +107,7 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interfac
 
     // Take start of frame timestamp
     t :> time;
+    c_time_server <: time;
 
     while (!eof) {
       select {
@@ -147,7 +151,8 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, client interfac
 
           // Do this once packet reception is finished
           STW(4, time); // TimeStamp Low
-          unsigned time_top_bits = i_tmr.get_top_bits(time);
+          unsigned time_top_bits = 0;
+          c_time_server :> time_top_bits;
           STW(3, time_top_bits); // TimeStamp High
 
           rx <: dptr;

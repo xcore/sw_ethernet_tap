@@ -103,14 +103,14 @@ int main()
       streaming chan c_mii1;
       streaming chan c_mii2;
       streaming chan c_control_to_sender;
-      interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
+      streaming chan c_time_server[NUM_TIMER_CLIENTS];
 
       par {
         buffer_sender(c_control_to_sender, c_inter_tile);
         receiver_control(c_mii1, c_mii2, c_control_to_sender);
-        pcapng_receiver(c_mii1, mii1, i_tmr[TIMER_CLIENT0]);
-        pcapng_receiver(c_mii2, mii2, i_tmr[TIMER_CLIENT1]);
-        pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
+        pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
+        pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
+        pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
       }
     }
   }

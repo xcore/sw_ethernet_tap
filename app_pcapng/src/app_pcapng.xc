@@ -13,8 +13,6 @@
 
 #define SEND_PACKET_DATA 1
 
-#define NUM_TIMER_CLIENTS 2
-
 // Circle slot
 on tile[1]: pcapng_mii_rx_t mii2 = {
   1,
@@ -52,7 +50,7 @@ static inline void process_received(streaming chanend c, int &work_pending,
 }
 
 static void control(streaming chanend c_mii1, streaming chanend c_mii2,
-    chanend c_control_to_outputter, streaming chanend debug)
+    streaming chanend c_control_to_outputter, streaming chanend debug)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -101,10 +99,8 @@ static void control(streaming chanend c_mii1, streaming chanend c_mii2,
         uintptr_t buffer;
         unsigned length_in_bytes;
         {buffer, length_in_bytes} = buffers_used_take(used_buffers);
-        master {
-          c_control_to_outputter <: buffer;
-          c_control_to_outputter <: length_in_bytes;
-        }
+        c_control_to_outputter <: buffer;
+        c_control_to_outputter <: length_in_bytes;
         work_pending--;
         sender_active = 1;
         break;
@@ -113,16 +109,15 @@ static void control(streaming chanend c_mii1, streaming chanend c_mii2,
   }
 }
 
-void xscope_outputter(chanend c_control_to_outputter)
+static void xscope_outputter(streaming chanend c_control_to_outputter)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
 
-    slave {
-      c_control_to_outputter :> buffer;
-      c_control_to_outputter :> length_in_bytes;
-    }
+    c_control_to_outputter :> buffer;
+    c_control_to_outputter :> length_in_bytes;
+
     unsafe {
       xscope_bytes_c(0, length_in_bytes, (unsigned char *)buffer);
     }
@@ -157,19 +152,25 @@ void debugger(streaming chanend c)
   }
 }
 
+enum {
+  TIMER_CLIENT0 = 0,
+  TIMER_CLIENT1,
+  NUM_TIMER_CLIENTS
+} timer_clients;
+
 int main()
 {
   streaming chan debug;
   streaming chan c_mii1;
   streaming chan c_mii2;
-  chan c_control_to_outputter;
-  interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
+  streaming chan c_time_server[NUM_TIMER_CLIENTS];
+  streaming chan c_control_to_outputter;
   par {
     on tile[1]:xscope_outputter(c_control_to_outputter);
     on tile[1]:control(c_mii1, c_mii2, c_control_to_outputter, debug);
-    on tile[1]:pcapng_receiver(c_mii1, mii1, i_tmr[0]);
-    on tile[1]:pcapng_receiver(c_mii2, mii2, i_tmr[1]);
-    on tile[1]:pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
+    on tile[1]:pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
+    on tile[1]:pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
+    on tile[1]:pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
 
     on tile[0]:debugger(debug);
   }
