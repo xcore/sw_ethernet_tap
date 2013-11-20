@@ -89,18 +89,14 @@ void pcapng_receiver(streaming chanend rx, pcapng_mii_rx_t &mii, streaming chane
     STW(0, PCAPNG_BLOCK_ENHANCED_PACKET); // Block Type
     STW(2, mii.id); // Interface ID
 
-    // Test the data valid to determine whether in the middle of a packet
-    int dv = 0;
-    mii.p_mii_rxdv :> dv;
-    if (dv) {
-
-      // If in the middle of the packet then wait for it to end
-      while (dv)
-        mii.p_mii_rxdv :> dv;
-
-      // And then clear any remaining bytes from the data port
-      clearbuf(mii.p_mii_rxd);
+    // If in the middle of the packet then wait for it to end
+    int dv = 1;
+    while (dv) {
+      mii.p_mii_rxdv :> dv;
     }
+
+    // Clear any remaining bytes from the data port
+    clearbuf(mii.p_mii_rxd);
 
     // Wait for the start of frame nibble
     mii.p_mii_rxd when pinseq(0xD) :> int sof;
