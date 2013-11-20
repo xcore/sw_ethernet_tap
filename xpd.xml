@@ -2,7 +2,7 @@
 <xpd>
     <components></components>
     <dependency repo = "sc_util">
-        <githash>b86d9ab787bdb0dcd268c28e3afd0b5d7fe833f4</githash>
+        <githash>eb2fab197d49d35b878dd7bd0cc0196f6bbeff3f</githash>
         <uri>git@github.com:pthedinger/sc_util.git</uri>
     </dependency>
     <dependency repo = "sc_slicekit_support">
@@ -14,6 +14,9 @@
     <location>git@github.com:xcore/sw_ethernet_tap</location>
     <name>sw_ethernet_tap</name>
     <maintainer>pthedinger</maintainer>
+    <exclude_dir>host_avb_tester</exclude_dir>
+    <exclude_dir>host_packet_analyser</exclude_dir>
+    <exclude_dir>host_pcapng</exclude_dir>
     <vendor>XMOS</vendor>
     <version_defines></version_defines>
     <xcore_repo>git://github.com/xcore/sw_ethernet_tap</xcore_repo>
