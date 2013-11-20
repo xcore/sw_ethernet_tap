@@ -1,8 +1,9 @@
+app_packet_analyser
+==================
 
-Compile on Mac/Linux:
- > make
+:scope: Early Development
+:description: An application to track traffic in both directions on a wire.
+:keywords: ethernet, packets
+:boards: SLICEKIT-L16 with Ethernet Tap
 
-Compile on Windows:
- > xmake
-
-Note that on Windows you will need the XMOS tools and Visual Studio on the path for this to work.
+An application to track traffic in both directions on a wire.

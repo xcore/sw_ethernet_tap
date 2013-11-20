@@ -1,22 +1,54 @@
 <?xml version="1.0" ?>
 <xpd>
-    <components></components>
-    <dependency repo = "sc_util">
-        <githash>eb2fab197d49d35b878dd7bd0cc0196f6bbeff3f</githash>
-        <uri>git@github.com:pthedinger/sc_util.git</uri>
-    </dependency>
+    <components>
+        <component description = "An application to test the QAV shaping of an AVB node" type = "demoCode" scope = "Early Development" path = "app_avb_tester" local = "false" id = "app_avb_tester" name = "app_avb_tester">
+            <board>SLICEKIT-L16 with Ethernet Tap</board>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_logging</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sw_ethernet_tap">module_pcapng</componentDependency>
+            <componentDependency repo = "origin" version = "1.0.3">module_slicekit_support</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_locks</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_xassert</componentDependency>
+            <keyword>avb</keyword>
+            <keyword>qav</keyword>
+            <keyword>ethernet</keyword>
+        </component>
+        <component description = "An application to track traffic in both directions on a wire." type = "demoCode" scope = "Early Development" path = "app_packet_analyser" local = "false" id = "app_packet_analyser" name = "app_packet_analyser">
+            <board>SLICEKIT-L16 with Ethernet Tap</board>
+            <componentDependency repo = "origin" version = "1.0.3">module_slicekit_support</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_logging</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_locks</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sw_ethernet_tap">module_pcapng</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_xassert</componentDependency>
+            <keyword>ethernet</keyword>
+            <keyword>packets</keyword>
+        </component>
+        <component description = "An application to capture packets and output pcapng files" type = "demoCode" scope = "Early Development" path = "app_pcapng" local = "false" id = "app_pcapng" name = "app_pcapng">
+            <board>SLICEKIT-L16 with Ethernet Tap</board>
+            <componentDependency repo = "git://github.com/xcore/sw_ethernet_tap">module_pcapng</componentDependency>
+            <componentDependency repo = "origin" version = "1.0.3">module_slicekit_support</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_logging</componentDependency>
+            <componentDependency repo = "git://github.com/xcore/sc_util" version = "1.0.3">module_xassert</componentDependency>
+            <keyword>ethernet</keyword>
+            <keyword>packets</keyword>
+            <keyword>pcapng</keyword>
+        </component>
+    </components>
     <dependency repo = "sc_slicekit_support">
         <githash>7920fc4235a96585274d73d25d275ea63b4cd285</githash>
         <uri>git://github.com/xcore/sc_slicekit_support</uri>
         <version>1.0.3rc0</version>
     </dependency>
+    <dependency repo = "sc_util">
+        <githash>eb2fab197d49d35b878dd7bd0cc0196f6bbeff3f</githash>
+        <uri>git://github.com/xcore/sc_util</uri>
+    </dependency>
     <description>A set of applications using the Ethernet Tap.</description>
-    <location>git@github.com:xcore/sw_ethernet_tap</location>
-    <name>sw_ethernet_tap</name>
-    <maintainer>pthedinger</maintainer>
     <exclude_dir>host_avb_tester</exclude_dir>
     <exclude_dir>host_packet_analyser</exclude_dir>
     <exclude_dir>host_pcapng</exclude_dir>
+    <location>git@github.com:xcore/sw_ethernet_tap</location>
+    <name>sw_ethernet_tap</name>
+    <maintainer>pthedinger</maintainer>
     <vendor>XMOS</vendor>
     <version_defines></version_defines>
     <xcore_repo>git://github.com/xcore/sw_ethernet_tap</xcore_repo>

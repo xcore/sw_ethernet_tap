@@ -1,9 +1,8 @@
-<Add title here>
-================
 
-:scope: <Put one of Roadmap, Example, Early Development or General Use>
-:description: <Add one line here>
-:keywords: <Add comma separated list of keywords>
-:boards: <Add comma separated list of supported boards>
+Compile on Mac/Linux:
+ > make
 
-<Add description of software block>
+Compile on Windows:
+ > xmake
+
+Note that on Windows you will need the XMOS tools and Visual Studio on the path for this to work.
