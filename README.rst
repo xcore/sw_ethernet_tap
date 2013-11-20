@@ -1,1 +1,1 @@
-The project requires the unreleased 13.0 tools
+The project requires the 13.0 tools.
