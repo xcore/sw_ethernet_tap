@@ -10,8 +10,7 @@
 
 #define TIMER_TICKS_PER_SECOND 100000000
 
-void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analysis,
-    chanend c_outputter_to_control)
+void analysis_control(streaming chanend c_receiver_to_control, streaming chanend c_control_to_analysis)
 {
   buffers_used_t used_buffers;
   buffers_used_initialise(used_buffers);
@@ -19,7 +18,8 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
   buffers_free_t free_buffers;
   buffers_free_initialise(free_buffers);
 
-  //start by issuing buffers to both of the miis
+  // Send two buffers to the receiver so it never has to block waiting for the buffer
+  c_receiver_to_control <: buffers_free_acquire(free_buffers);
   c_receiver_to_control <: buffers_free_acquire(free_buffers);
 
   int analysis_active = 0;
@@ -40,13 +40,9 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
         }
         break;
       }
-      case c_outputter_to_control :> uintptr_t buffer : {
-        // Buffer fully processed - release it
-        buffers_free_release(free_buffers, buffer);
-        break;
-      }
       case analysis_active => c_control_to_analysis :> uintptr_t buffer : {
-        // Analysis complete - can pass it another buffer
+        // Analysis complete - release the buffer
+        buffers_free_release(free_buffers, buffer);
         analysis_active = 0;
         break;
       }
@@ -55,10 +51,8 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
         uintptr_t buffer;
         unsigned length_in_bytes;
         {buffer, length_in_bytes} = buffers_used_take(used_buffers);
-        master {
-          c_control_to_analysis <: buffer;
-          c_control_to_analysis <: length_in_bytes;
-        }
+        c_control_to_analysis <: buffer;
+        c_control_to_analysis <: length_in_bytes;
         work_pending--;
         analysis_active = 1;
         break;
@@ -67,7 +61,7 @@ void analysis_control(chanend c_receiver_to_control, chanend c_control_to_analys
   }
 }
 
-void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control)
+void buffer_receiver(chanend c_inter_tile, streaming chanend c_receiver_to_control)
 {
   uintptr_t buffer;
 
@@ -94,52 +88,20 @@ void buffer_receiver(chanend c_inter_tile, chanend c_receiver_to_control)
   }
 }
 
-void analyser(chanend c_control_to_analysis, chanend c_analysis_to_outputter)
+void analyser(streaming chanend c_control_to_analysis)
 {
   while (1) {
     uintptr_t buffer;
     unsigned length_in_bytes;
-    slave {
-      c_control_to_analysis :> buffer;
-      c_control_to_analysis :> length_in_bytes;
-    }
+    c_control_to_analysis :> buffer;
+    c_control_to_analysis :> length_in_bytes;
+
     unsafe {
       analyse_buffer((unsigned char *)buffer, length_in_bytes);
     }
 
-    // Pass the buffer on to the outputter
-    c_analysis_to_outputter <: buffer;
-    c_analysis_to_outputter <: length_in_bytes;
-
-    // Tell the control the analysis is ready for the next buffer
+    // Tell control it can release the buffer
     c_control_to_analysis <: buffer;
-  }
-}
-
-void xscope_outputter(server interface outputter_config i_config,
-    chanend c_analysis_to_outputter, chanend c_outputter_to_control)
-{
-  int send_packets_over_xscope = 0;
-
-  while (1) {
-    uintptr_t buffer;
-    select {
-      case c_analysis_to_outputter :> buffer : {
-        unsigned length_in_bytes;
-        c_analysis_to_outputter :> length_in_bytes;
-        unsafe {
-          if (send_packets_over_xscope)
-            xscope_bytes_c(0, length_in_bytes, (unsigned char *)buffer);
-        }
-        c_outputter_to_control <: buffer;
-        break;
-      }
-      case i_config.set_output_packets(int enabled) : {
-        send_packets_over_xscope = enabled;
-        debug_printf("xscope packet output %s\n", enabled ? "enabled" : "disabled");
-        break;
-      }
-    }
   }
 }
 

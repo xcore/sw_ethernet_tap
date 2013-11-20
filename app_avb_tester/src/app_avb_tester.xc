@@ -45,9 +45,7 @@ void xscope_user_init()
  * \brief   A core that listens to data being sent from the host and
  *          informs the analysis engine of any changes
  */
-void xscope_listener(chanend c_host_data,
-                     client interface analysis_config i_checker_config,
-                     client interface outputter_config i_outputter_config)
+void xscope_listener(chanend c_host_data, client interface analysis_config i_checker_config)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
@@ -77,14 +75,6 @@ void xscope_listener(chanend c_host_data,
               i_checker_config.set_debug(0);
               break;
 
-            case AVB_TESTER_XSCOPE_PACKETS_ENABLE:
-              i_outputter_config.set_output_packets(1);
-              break;
-
-            case AVB_TESTER_XSCOPE_PACKETS_DISABLE:
-              i_outputter_config.set_output_packets(0);
-              break;
-
             default:
               debug_printf("Unrecognised command '%d' received from host\n", cmd);
               break;
@@ -112,38 +102,32 @@ int main()
     xscope_host_data(c_host_data);
 
     on tile[ANALYSIS_TILE]: {
-      chan c_receiver_to_control;
-      chan c_control_to_analysis;
-      chan c_analysis_to_outputter;
-      chan c_outputter_to_control;
+      streaming chan c_receiver_to_control;
+      streaming chan c_control_to_analysis;
       interface analysis_config i_checker_config;
-      interface outputter_config i_outputter_config;
 
       analyse_init();
       par {
         buffer_receiver(c_inter_tile, c_receiver_to_control);
-        analysis_control(c_receiver_to_control, c_control_to_analysis,
-            c_outputter_to_control);
-        analyser(c_control_to_analysis, c_analysis_to_outputter);
-        xscope_outputter(i_outputter_config, c_analysis_to_outputter,
-            c_outputter_to_control);
+        analysis_control(c_receiver_to_control, c_control_to_analysis);
+        analyser(c_control_to_analysis);
         periodic_checks(i_checker_config);
-        xscope_listener(c_host_data, i_checker_config, i_outputter_config);
+        xscope_listener(c_host_data, i_checker_config);
       }
     }
 
     on tile[RECEIVER_TILE] : {
       streaming chan c_mii1;
       streaming chan c_mii2;
-      chan c_control_to_sender;
-      interface pcapng_timer_interface i_tmr[NUM_TIMER_CLIENTS];
+      streaming chan c_control_to_sender;
+      streaming chan c_time_server[NUM_TIMER_CLIENTS];
 
       par {
         buffer_sender(c_control_to_sender, c_inter_tile);
         receiver_control(c_mii1, c_mii2, c_control_to_sender);
-        pcapng_receiver(c_mii1, mii1, i_tmr[TIMER_CLIENT0]);
-        pcapng_receiver(c_mii2, mii2, i_tmr[TIMER_CLIENT1]);
-        pcapng_timer_server(i_tmr, NUM_TIMER_CLIENTS);
+        pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
+        pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
+        pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
       }
     }
   }
