@@ -71,7 +71,7 @@ void buffer_receiver(chanend c_inter_tile, streaming chanend c_receiver_to_contr
 
     unsigned length_in_bytes;
     c_inter_tile :> length_in_bytes;
-    assert(length_in_bytes < MAX_BUFFER_SIZE);
+    assert(length_in_bytes <= MAX_BUFFER_SIZE);
 
     unsigned int length_in_words = (length_in_bytes + 3) / 4;
     slave {
