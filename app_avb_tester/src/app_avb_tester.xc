@@ -45,7 +45,8 @@ void xscope_user_init()
  * \brief   A core that listens to data being sent from the host and
  *          informs the analysis engine of any changes
  */
-void xscope_listener(chanend c_host_data, client interface analysis_config i_checker_config)
+void xscope_listener(chanend c_host_data, client interface analysis_config i_checker_config,
+    client interface ethernet_tap_relay_control i_relay_control)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
@@ -75,6 +76,14 @@ void xscope_listener(chanend c_host_data, client interface analysis_config i_che
               i_checker_config.set_debug(0);
               break;
 
+            case AVB_TESTER_SET_RELAY_OPEN:
+              i_relay_control.set_relay_open();
+              break;
+
+            case AVB_TESTER_SET_RELAY_CLOSE:
+              i_relay_control.set_relay_close();
+              break;
+
             default:
               debug_printf("Unrecognised command '%d' received from host\n", cmd);
               break;
@@ -98,6 +107,8 @@ int main()
 {
   chan c_host_data;
   chan c_inter_tile;
+  interface ethernet_tap_relay_control i_relay_control;
+
   par {
     xscope_host_data(c_host_data);
 
@@ -112,7 +123,7 @@ int main()
         analysis_control(c_receiver_to_control, c_control_to_analysis);
         analyser(c_control_to_analysis);
         periodic_checks(i_checker_config);
-        xscope_listener(c_host_data, i_checker_config);
+        xscope_listener(c_host_data, i_checker_config, i_relay_control);
       }
     }
 
@@ -128,6 +139,7 @@ int main()
         pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
         pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
         pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
+        relay_control(i_relay_control);
       }
     }
   }

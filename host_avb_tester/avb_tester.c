@@ -95,6 +95,18 @@ void *console_thread(void *arg)
         break;
       }
 
+      case 'c': {
+        tester_command_t cmd = AVB_TESTER_SET_RELAY_CLOSE;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
+
+      case 'o': {
+        tester_command_t cmd = AVB_TESTER_SET_RELAY_OPEN;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
+
       case 'h':
       case '?':
         print_console_usage();

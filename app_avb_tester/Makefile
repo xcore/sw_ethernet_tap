@@ -10,7 +10,7 @@ APP_NAME = app_avb_tester
 
 # The USED_MODULES variable lists other module used by the application.
 USED_MODULES  = module_slicekit_support module_xassert module_pcapng module_logging
-USED_MODULES += module_locks
+USED_MODULES += module_locks module_ethernet_tap
 
 # The flags passed to xcc when building the application
 # You can also set the following to override flags for a particular language:
