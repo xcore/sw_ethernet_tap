@@ -7,9 +7,6 @@
  *  ./pcapng_listener -s 127.0.0.1 -p 12346
  *
  */
-#include "xscope_host_shared.h"
-#include "avb_tester.h"
-
 /*
  * Includes for thread support
  */
@@ -18,6 +15,9 @@
 #else
   #include <pthread.h>
 #endif
+
+#include "xscope_host_shared.h"
+#include "avb_tester.h"
 
 #define DEFAULT_FILE "cap.pcapng"
 
@@ -41,6 +41,8 @@ void print_console_usage()
   printf("  h|?     : print this help message\n");
   printf("  e <o|n> : tell app to expect (o)versubscribed or (n)ormal traffic\n");
   printf("  d <e|d> : tell app to (e)nable or (d)isable debug output\n");
+  printf("  c       : close the relay (connect)\n");
+  printf("  o       : open the relay (disconnect)\n");
   printf("  q       : quit\n");
 }
 
