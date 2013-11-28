@@ -12,6 +12,7 @@
 #include "analysis_utils.h"
 #include "receiver_tile.h"
 #include "analysis_tile.h"
+#include "packet_analyser.h"
 
 #define ANALYSIS_TILE 0
 #define RECEIVER_TILE 1
@@ -44,7 +45,8 @@ void xscope_user_init()
  * \brief   A core that listens to data being sent from the host and
  *          informs the analysis engine of any changes
  */
-void xscope_listener(chanend c_host_data, client interface analysis_config i_checker_config)
+void xscope_listener(chanend c_host_data,
+    client interface ethernet_tap_relay_control i_relay_control)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
@@ -58,6 +60,14 @@ void xscope_listener(chanend c_host_data, client interface analysis_config i_che
           // Expecting a word from the host which indicates the command
           unsigned int cmd = buffer[0];
           switch (cmd) {
+            case PACKET_ANALYSER_SET_RELAY_OPEN:
+              i_relay_control.set_relay_open();
+              break;
+
+            case PACKET_ANALYSER_SET_RELAY_CLOSE:
+              i_relay_control.set_relay_close();
+              break;
+
             default:
               debug_printf("Unrecognised command '%d' received from host\n", cmd);
               break;
@@ -81,21 +91,22 @@ int main()
 {
   chan c_host_data;
   chan c_inter_tile;
+  interface ethernet_tap_relay_control i_relay_control;
+
   par {
     xscope_host_data(c_host_data);
 
     on tile[ANALYSIS_TILE]: {
       streaming chan c_receiver_to_control;
       streaming chan c_control_to_analysis;
-      interface analysis_config i_checker_config;
 
       analyse_init();
       par {
         buffer_receiver(c_inter_tile, c_receiver_to_control);
         analysis_control(c_receiver_to_control, c_control_to_analysis);
         analyser(c_control_to_analysis);
-        periodic_checks(i_checker_config);
-        xscope_listener(c_host_data, i_checker_config);
+        periodic_checks();
+        xscope_listener(c_host_data, i_relay_control);
       }
     }
 
@@ -111,6 +122,7 @@ int main()
         pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
         pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
         pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
+        relay_control(i_relay_control);
       }
     }
   }

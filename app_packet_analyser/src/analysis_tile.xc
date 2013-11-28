@@ -102,7 +102,7 @@ void analyser(streaming chanend c_control_to_analysis)
   }
 }
 
-void periodic_checks(server interface analysis_config i_config)
+void periodic_checks()
 {
   timer tmr;
   int time;

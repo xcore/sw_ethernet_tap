@@ -1,6 +1,6 @@
 
 APP_NAME = packet_analyser
-FLAGS = -O2
+FLAGS = -O2 -DXSCOPE_HOST_HAS_PROMPT
 
 INCLUDES += -I../app_packet_analyser/src
 

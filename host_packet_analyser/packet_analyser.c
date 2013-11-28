@@ -7,8 +7,20 @@
  *  ./packet_analyser -s 127.0.0.1 -p 12346
  *
  */
+/*
+ * Includes for thread support
+ */
+#ifdef _WIN32
+  #include <winsock.h>
+#else
+  #include <pthread.h>
+#endif
+
 #include "xscope_host_shared.h"
 #include "analysis_utils.h"
+#include "packet_analyser.h"
+
+const char *g_prompt = "";
 
 void hook_data_received(int xscope_probe, void *data, int data_len)
 {
@@ -35,6 +47,70 @@ void hook_exiting()
   // Do nothing
 }
 
+void print_console_usage()
+{
+  printf("Supported commands:\n");
+  printf("  h|?     : print this help message\n");
+  printf("  c       : close the relay (connect)\n");
+  printf("  o       : open the relay (disconnect)\n");
+  printf("  q       : quit\n");
+}
+
+#define LINE_LENGTH 1024
+
+/*
+ * A separate thread to handle user commands to control the target.
+ */
+#ifdef _WIN32
+DWORD WINAPI console_thread(void *arg)
+#else
+void *console_thread(void *arg)
+#endif
+{
+  int sockfd = *(int *)arg;
+  char buffer[LINE_LENGTH + 1];
+  do {
+    int i = 0;
+    int c = 0;
+
+    for (i = 0; (i < LINE_LENGTH) && ((c = getchar()) != EOF) && (c != '\n'); i++)
+      buffer[i] = tolower(c);
+    buffer[i] = '\0';
+
+    switch (buffer[0]) {
+      case 'q':
+        print_and_exit("Done\n");
+        break;
+
+      case 'c': {
+        tester_command_t cmd = PACKET_ANALYSER_SET_RELAY_CLOSE;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
+
+      case 'o': {
+        tester_command_t cmd = PACKET_ANALYSER_SET_RELAY_OPEN;
+        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
+        break;
+      }
+
+      case 'h':
+      case '?':
+        print_console_usage();
+        break;
+
+      default:
+        printf("Unrecognised command '%s'\n", buffer);
+        print_console_usage();
+    }
+  } while (1);
+
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
+}
 void usage(char *argv[])
 {
   printf("Usage: %s [-s server_ip] [-p port]\n", argv[0]);
@@ -45,6 +121,11 @@ void usage(char *argv[])
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  HANDLE thread;
+#else
+  pthread_t tid;
+#endif
   char *server_ip = DEFAULT_SERVER_IP;
   char *port_str = DEFAULT_PORT;
   int err = 0;
@@ -78,6 +159,17 @@ int main(int argc, char *argv[])
 
   printf("|                 UP                     ||                  DOWN                  |\n");
   printf("| Packets | Bytes    | Mb/s   | %% util   || Packets | Bytes    | Mb/s   | %% util   |\n");
+
+  // Now start the console
+#ifdef _WIN32
+  thread = CreateThread(NULL, 0, console_thread, &sockfd, 0, NULL);
+  if (thread == NULL)
+    print_and_exit("ERROR: Failed to create console thread\n");
+#else
+  err = pthread_create(&tid, NULL, &console_thread, &sockfd);
+  if (err != 0)
+    print_and_exit("ERROR: Failed to create console thread\n");
+#endif
 
   handle_socket(sockfd);
   return 0;
