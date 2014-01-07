@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
   char *server_ip = DEFAULT_SERVER_IP;
   char *port_str = DEFAULT_PORT;
   int err = 0;
-  int sockfd = 0;
+  int sockfds[1] = {0};
   int c = 0;
 
   while ((c = getopt(argc, argv, "s:p:")) != -1) {
@@ -155,23 +155,23 @@ int main(int argc, char *argv[])
   if (err)
     usage(argv);
 
-  sockfd = initialise_common(server_ip, port_str);
+  sockfds[0] = initialise_socket(server_ip, port_str);
 
   printf("|                 UP                     ||                  DOWN                  |\n");
   printf("| Packets | Bytes    | Mb/s   | %% util   || Packets | Bytes    | Mb/s   | %% util   |\n");
 
   // Now start the console
 #ifdef _WIN32
-  thread = CreateThread(NULL, 0, console_thread, &sockfd, 0, NULL);
+  thread = CreateThread(NULL, 0, console_thread, &sockfds[0], 0, NULL);
   if (thread == NULL)
     print_and_exit("ERROR: Failed to create console thread\n");
 #else
-  err = pthread_create(&tid, NULL, &console_thread, &sockfd);
+  err = pthread_create(&tid, NULL, &console_thread, &sockfds[0]);
   if (err != 0)
     print_and_exit("ERROR: Failed to create console thread\n");
 #endif
 
-  handle_socket(sockfd);
+  handle_sockets(sockfds, 1);
   return 0;
 }
 

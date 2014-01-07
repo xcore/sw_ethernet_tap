@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
   char *port_str = DEFAULT_PORT;
   char *filename = DEFAULT_FILE;
   int err = 0;
-  int sockfd = 0;
+  int sockfds[1] = {0};
   int c = 0;
 
   while ((c = getopt(argc, argv, "ls:p:")) != -1) {
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
   if (err)
     usage(argv);
 
-  sockfd = initialise_common(server_ip, port_str);
+  sockfds[0] = initialise_socket(server_ip, port_str);
   g_pcap_fptr = fopen(filename, "wb");
 
   if (g_libpcap_mode) {
@@ -154,7 +154,7 @@ int main(int argc, char *argv[])
   }
   fflush(g_pcap_fptr);
 
-  handle_socket(sockfd);
+  handle_sockets(sockfds, 1);
 
   return 0;
 }

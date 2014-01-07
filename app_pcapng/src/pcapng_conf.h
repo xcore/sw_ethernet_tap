@@ -4,7 +4,7 @@
 /*
  * Use the CAPTURE_BYTES to define the leading number of bytes that the ethernet tap captures of each frame.
  */
-#define CAPTURE_BYTES 64
+#define CAPTURE_BYTES 128
 #define CAPTURE_WORDS (CAPTURE_BYTES / 4)
 
 /*
