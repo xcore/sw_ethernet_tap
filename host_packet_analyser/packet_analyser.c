@@ -22,6 +22,11 @@
 
 const char *g_prompt = "";
 
+void hook_registration_received(int sockfd, int xscope_probe, char *name)
+{
+  // Do nothing
+}
+
 void hook_data_received(int xscope_probe, void *data, int data_len)
 {
   interface_state_t *state = (interface_state_t *)data;
