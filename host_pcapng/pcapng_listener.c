@@ -24,7 +24,7 @@ void hook_registration_received(int sockfd, int xscope_probe, char *name)
   // Do nothing
 }
 
-void hook_data_received(int xscope_probe, void *data, int data_len)
+void hook_data_received(int sockfd, int xscope_probe, void *data, int data_len)
 {
   if (g_libpcap_mode) {
     // Convert the pacpng data from the target to libpcap format

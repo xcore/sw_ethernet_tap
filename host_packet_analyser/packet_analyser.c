@@ -27,7 +27,7 @@ void hook_registration_received(int sockfd, int xscope_probe, char *name)
   // Do nothing
 }
 
-void hook_data_received(int xscope_probe, void *data, int data_len)
+void hook_data_received(int sockfd, int xscope_probe, void *data, int data_len)
 {
   interface_state_t *state = (interface_state_t *)data;
   double mega_bits_per_second = (state->byte_snapshot * 8.0) / 1000000.0;
