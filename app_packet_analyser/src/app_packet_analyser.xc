@@ -13,6 +13,7 @@
 #include "receiver_tile.h"
 #include "analysis_tile.h"
 #include "packet_analyser.h"
+#include "ethernet_tap.h"
 
 #define ANALYSIS_TILE 0
 #define RECEIVER_TILE 1
@@ -46,7 +47,7 @@ void xscope_user_init()
  *          informs the analysis engine of any changes
  */
 void xscope_listener(chanend c_host_data,
-    client interface ethernet_tap_relay_control i_relay_control)
+    client interface ethernet_tap_relay_control_if i_relay_control)
 {
   // The maximum read size is 256 bytes
   unsigned int buffer[256/4];
@@ -91,7 +92,7 @@ int main()
 {
   chan c_host_data;
   chan c_inter_tile;
-  interface ethernet_tap_relay_control i_relay_control;
+  interface ethernet_tap_relay_control_if i_relay_control;
 
   par {
     xscope_host_data(c_host_data);

@@ -92,18 +92,3 @@ void buffer_sender(streaming chanend c_control_to_sender, chanend c_inter_tile)
   }
 }
 
-void relay_control(server interface ethernet_tap_relay_control i_relay_control)
-{
-  while (1) {
-    select {
-      case i_relay_control.set_relay_open() : {
-        ethernet_tap_set_relay_open();
-        break;
-      }
-      case i_relay_control.set_relay_close() : {
-        ethernet_tap_set_relay_close();
-        break;
-      }
-    }
-  }
-}

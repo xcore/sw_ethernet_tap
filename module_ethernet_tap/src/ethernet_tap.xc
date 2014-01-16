@@ -36,3 +36,18 @@ void ethernet_tap_set_relay_close()
   port_ethernet_tap_relay1 <: 0;
 }
 
+void relay_control(server interface ethernet_tap_relay_control_if i_relay_control)
+{
+  while (1) {
+    select {
+      case i_relay_control.set_relay_open() : {
+        ethernet_tap_set_relay_open();
+        break;
+      }
+      case i_relay_control.set_relay_close() : {
+        ethernet_tap_set_relay_close();
+        break;
+      }
+    }
+  }
+}
