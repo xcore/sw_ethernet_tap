@@ -1,6 +1,8 @@
 #ifndef __ETHERNET_TAP__
 #define __ETHERNET_TAP__
 
+#define TEN_MILLISEC 1000000
+
 /**
  * \brief   The interface between the xscope receiver and the relay control
  */
@@ -10,16 +12,19 @@ interface ethernet_tap_relay_control_if {
 };
 
 /*
- * Open the relay on the Ethernet Tap to take down the link.
- * Note: this function takes 10ms to complete as that is the time the
- * relay takes to activate.
+ * \brief   Set the relay control pins to idle.
+ */
+void ethernet_tap_set_control_idle();
+
+/*
+ * \brief   Drive the relay control pins to open the relay. After 10ms
+ *          ethernet_tap_set_control_idle() should be called.
  */
 void ethernet_tap_set_relay_open();
 
 /*
- * Close the relay on the Ethernet Tap to bring the link back up.
- * Note: this function takes 10ms to complete as that is the time the
- * relay takes to activate.
+ * \brief   Drive the relay control pins to close the relay. After 10ms
+ *          ethernet_tap_set_control_idle() should be called.
  */
 void ethernet_tap_set_relay_close();
 
@@ -28,6 +33,7 @@ void ethernet_tap_set_relay_close();
  *
  * \param   i_relay_control           Interface for controlling the relay
  */
+[[combinable]]
 void relay_control(server interface ethernet_tap_relay_control_if i_relay_control);
 
 #endif // __ETHERNET_TAP__
