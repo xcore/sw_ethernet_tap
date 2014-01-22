@@ -62,26 +62,29 @@ void check_counts(int oversubscribed, int debug)
 {
   // First pass to snapshot the current counts
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
-    stream_state[i].active = ((stream_state[i].last_count != 0) &&
-                              (stream_state[i].count != 0));
-    stream_state[i].last_count = stream_state[i].snapshot;
+    stream_state_t *state = &stream_state[i];
+
+    state->active = ((state->last_count != 0) && (state->count != 0));
+    state->last_count = state->snapshot;
 
     // Ensure the read/modify of count is atomic
     hwlock_acquire(lock);
-    stream_state[i].snapshot = stream_state[i].count;
-    stream_state[i].count = 0;
+    state->snapshot = state->count;
+    state->count = 0;
     hwlock_release(lock);
   }
 
   int num_active = 0;
   // Second pass to do the checking and printing
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
-    if (stream_state[i].id.low || stream_state[i].id.high) {
-      if (stream_state[i].snapshot == 0) {
-        debug_printf("Removing stream 0x%x%x\n", stream_state[i].id.high, stream_state[i].id.low);
+    stream_state_t *state = &stream_state[i];
+
+    if (state->id.low || state->id.high) {
+      if (state->snapshot == 0) {
+        debug_printf("Removing stream 0x%x%x\n", state->id.high, state->id.low);
         hwlock_acquire(lock);
-        stream_state[i].id.high = 0;
-        stream_state[i].id.low = 0;
+        state->id.high = 0;
+        state->id.low = 0;
         hwlock_release(lock);
 
       } else {
@@ -95,22 +98,22 @@ void check_counts(int oversubscribed, int debug)
           const unsigned int ifg_bytes = 96/8; // InterFrameGap = 96 bit-times
 
           // The one extra byte is for the entire frame (data + preamble + IFG)
-          unsigned int num_bytes = stream_state[i].packet_num_bytes +
+          unsigned int num_bytes = state->packet_num_bytes +
                                       preamble_bytes + ifg_bytes;
           expected_rate = expected_rate * (num_bytes + 1) / num_bytes; 
         }
 
         // Need to check the value of last_count because otherwise there are
         // spurious errors when the stream is stopping.
-        if (stream_state[i].active &&
-            (stream_state[i].last_count < (expected_rate - ERROR_MARGIN) ||
-             stream_state[i].last_count > (expected_rate + ERROR_MARGIN)))
+        if (state->active &&
+            (state->last_count < (expected_rate - ERROR_MARGIN) ||
+             state->last_count > (expected_rate + ERROR_MARGIN)))
         {
-          debug_printf("ERROR: 0x%x%x %d\n", stream_state[i].id.high, stream_state[i].id.low, 
-              stream_state[i].last_count);
+          debug_printf("ERROR: 0x%x%x had %d packets in the last second\n", state->id.high, state->id.low,
+              state->last_count);
         } else if (debug) {
-          debug_printf("0x%x%x %d\n", stream_state[i].id.high, stream_state[i].id.low,
-              stream_state[i].last_count);
+          debug_printf("0x%x%x %d\n", state->id.high, state->id.low,
+              state->last_count);
         }
       }
     }
@@ -125,30 +128,34 @@ static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes
   unsigned int free_index = MAX_NUM_STREAMS;
   hwlock_acquire(lock);
   for (unsigned int i = 0; i < MAX_NUM_STREAMS; i++) {
-    if ((id->low  == stream_state[i].id.low) &&
-        (id->high == stream_state[i].id.high)) {
-      stream_state[i].count++;
+    stream_state_t *state = &stream_state[i];
 
-      if (stream_state[i].packet_num_bytes != packet_num_bytes) {
+    if ((id->low  == state->id.low) &&
+        (id->high == state->id.high)) {
+      state->count++;
+
+      if (state->packet_num_bytes != packet_num_bytes) {
         debug_printf("ERROR stream 0x%x%x packet size changed from %d to %d\n",
-            stream_state[i].id.high, stream_state[i].id.low,
-            stream_state[i].packet_num_bytes, packet_num_bytes);
+            state->id.high, state->id.low,
+            state->packet_num_bytes, packet_num_bytes);
+      }
       }
       goto increment_count_done;
 
-    } else if ((stream_state[i].id.low  == 0) &&
-               (stream_state[i].id.high == 0)) {
+    } else if ((state->id.low  == 0) &&
+               (state->id.high == 0)) {
       free_index = i;
     }
   }
 
   if (free_index != MAX_NUM_STREAMS) {
-    stream_state[free_index].id.low  = id->low;
-    stream_state[free_index].id.high = id->high;
-    stream_state[free_index].count = 1;
-    stream_state[free_index].snapshot = 0;
-    stream_state[free_index].packet_num_bytes = packet_num_bytes;
-    debug_printf("Adding stream 0x%x%x\n", stream_state[free_index].id.high, stream_state[free_index].id.low);
+    stream_state_t *state = &stream_state[free_index];
+    state->id.low  = id->low;
+    state->id.high = id->high;
+    state->count = 1;
+    state->snapshot = 0;
+    state->packet_num_bytes = packet_num_bytes;
+    debug_printf("Adding stream 0x%x%x\n", state->id.high, state->id.low);
   } else {
     assert(0); // Can't track this stream - no free slots available
   }
