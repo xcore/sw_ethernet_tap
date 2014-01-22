@@ -154,6 +154,9 @@ int main(int argc, char *argv[])
   int sockfds[1] = {0};
   int c = 0;
 
+  // Set stdout to be unbuffered
+  setvbuf(stdout, NULL, _IOLBF, 0);
+
   while ((c = getopt(argc, argv, "s:p:")) != -1) {
     switch (c) {
       case 's':
