@@ -47,6 +47,8 @@ typedef struct {
   unsigned int last_count;        // Packet count in the last window
   unsigned int snapshot;          // Used to record a snapshot of the packet count
                                   // for checking
+  unsigned char sequence_number;  // Record the sequence number of packets to check
+                                  // none go missing
 } stream_state_t;
 
 /**

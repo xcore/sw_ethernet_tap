@@ -17,7 +17,8 @@
 stream_state_t stream_state[MAX_NUM_STREAMS];
 hwlock_t lock;
 
-static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes);
+static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes,
+    unsigned char sequence_number);
 
 void analyse_init()
 {
@@ -53,8 +54,10 @@ void analyse_buffer(const unsigned char *buffer, const unsigned int length_in_by
     id.low  = AVBTP_STREAM_ID0(avb_hdr);
     id.high = AVBTP_STREAM_ID1(avb_hdr);
 
-    if (id.low != 0 || id.high != 0)
-      increment_count(&id, epb->packet_len);
+    if (id.low != 0 || id.high != 0) {
+      unsigned char sequence_number = AVBTP_SEQUENCE_NUMBER(avb_hdr);
+      increment_count(&id, epb->packet_len, sequence_number);
+    }
   }
 }
 
@@ -123,7 +126,8 @@ void check_counts(int oversubscribed, int debug)
     debug_printf("No active streams found\n");
 }
 
-static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes)
+static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes,
+    unsigned char sequence_number)
 {
   unsigned int free_index = MAX_NUM_STREAMS;
   hwlock_acquire(lock);
@@ -139,7 +143,12 @@ static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes
             state->id.high, state->id.low,
             state->packet_num_bytes, packet_num_bytes);
       }
+      if (state->sequence_number != sequence_number) {
+        debug_printf("ERROR stream 0x%x%x sequence expected %d got %d\n",
+            state->id.high, state->id.low,
+            state->sequence_number, sequence_number);
       }
+      state->sequence_number = sequence_number + 1;
       goto increment_count_done;
 
     } else if ((state->id.low  == 0) &&
@@ -155,6 +164,7 @@ static void increment_count(const stream_id_t *id, unsigned int packet_num_bytes
     state->count = 1;
     state->snapshot = 0;
     state->packet_num_bytes = packet_num_bytes;
+    state->sequence_number = sequence_number + 1;
     debug_printf("Adding stream 0x%x%x\n", state->id.high, state->id.low);
   } else {
     assert(0); // Can't track this stream - no free slots available
