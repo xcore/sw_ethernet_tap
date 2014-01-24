@@ -46,8 +46,7 @@ void print_console_usage()
   printf("  h|?     : print this help message\n");
   printf("  e <o|n> : tell app to expect (o)versubscribed or (n)ormal traffic\n");
   printf("  d <e|d> : tell app to (e)nable or (d)isable debug output\n");
-  printf("  c       : close the relay (connect)\n");
-  printf("  o       : open the relay (disconnect)\n");
+  printf("  r <o|c> : Set the relay (o)pen or (c)losed\n");
   printf("  q       : quit\n");
 }
 
@@ -102,14 +101,10 @@ void *console_thread(void *arg)
         break;
       }
 
-      case 'c': {
+      case 'r': {
         tester_command_t cmd = AVB_TESTER_SET_RELAY_CLOSE;
-        xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
-        break;
-      }
-
-      case 'o': {
-        tester_command_t cmd = AVB_TESTER_SET_RELAY_OPEN;
+        if (get_next_char(&buffer[1]) == 'o')
+          cmd = AVB_TESTER_SET_RELAY_OPEN;
         xscope_ep_request_upload(sockfd, 4, (unsigned char *)&cmd);
         break;
       }
