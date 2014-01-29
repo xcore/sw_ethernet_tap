@@ -6,6 +6,7 @@
 #include <platform.h>
 #include <xscope.h>
 #include <stdint.h>
+#include <timer.h>
 
 #include "receiver.h"
 #include "avb_tester.h"
@@ -140,7 +141,13 @@ int main()
         pcapng_receiver(c_mii1, mii1, c_time_server[TIMER_CLIENT0]);
         pcapng_receiver(c_mii2, mii2, c_time_server[TIMER_CLIENT1]);
         pcapng_timer_server(c_time_server, NUM_TIMER_CLIENTS);
-        relay_control(i_relay_control);
+        {
+          // Ensure the relay starts closed
+          ethernet_tap_set_relay_close();
+          delay_milliseconds(10);
+          ethernet_tap_set_control_idle();
+          relay_control(i_relay_control);
+        }
       }
     }
   }
